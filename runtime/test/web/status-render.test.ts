@@ -164,8 +164,17 @@ function collectInnerHtml(node: FakeNode | null): string[] {
   return [node.innerHTML, ...node.childNodes.flatMap((child) => collectInnerHtml(child))].filter(Boolean);
 }
 
-test('AgentStatus shows the tail of live tool output while collapsed', async () => {
-  const fakeDocument = new FakeDocument();
+function getAttr(node: FakeElement, name: string): string {
+  return node.attributes.find((attr) => attr.name === name)?.value || '';
+}
+
+function findElements(node: FakeNode | null, predicate: (node: FakeElement) => boolean): FakeElement[] {
+  if (!node || !(node instanceof FakeElement)) return [];
+  const matches = predicate(node) ? [node] : [];
+  return [...matches, ...node.childNodes.flatMap((child) => findElements(child, predicate))];
+}
+
+function installStatusDomStubs(fakeDocument: FakeDocument): void {
   (globalThis as any).document = fakeDocument;
   (globalThis as any).window = { document: fakeDocument };
   (globalThis as any).Element = FakeElement;
@@ -179,6 +188,11 @@ test('AgentStatus shows the tail of live tool output while collapsed', async () 
       };
     }
   };
+}
+
+test('AgentStatus shows the tail of live tool output while collapsed', async () => {
+  const fakeDocument = new FakeDocument();
+  installStatusDomStubs(fakeDocument);
 
   const { AgentStatus } = await importFresh<typeof import('../../web/src/components/status.ts')>('../web/src/components/status.ts');
   const { h, render } = await import('../../web/src/vendor/preact-htm.js');
@@ -202,6 +216,40 @@ test('AgentStatus shows the tail of live tool output while collapsed', async () 
   expect(htmlOutput).toContain('line 7');
   expect(htmlOutput).not.toContain('line 1');
   expect(htmlOutput).not.toContain('line 2');
+
+  render(null, host);
+});
+
+test('AgentStatus places collapsed tool-output more-lines control above the tail preview', async () => {
+  const fakeDocument = new FakeDocument();
+  installStatusDomStubs(fakeDocument);
+
+  const { AgentStatus } = await importFresh<typeof import('../../web/src/components/status.ts')>('../web/src/components/status.ts');
+  const { h, render } = await import('../../web/src/vendor/preact-htm.js');
+
+  const host = fakeDocument.createElement('div');
+  fakeDocument.body.appendChild(host);
+  const output = Array.from({ length: 7 }, (_, index) => `line ${index + 1}`).join('\n');
+
+  render(h(AgentStatus, {
+    status: {
+      type: 'tool_status',
+      title: 'bash',
+      status: 'Streaming output...',
+      output_preview: output,
+      output_total_lines: 7,
+    },
+  }), host);
+
+  const toolPanel = findElements(host, (node) => getAttr(node, 'data-panel-key') === 'tool-output')[0];
+  expect(toolPanel).toBeDefined();
+  const directElementChildren = toolPanel.childNodes.filter((child): child is FakeElement => child instanceof FakeElement);
+  const truncationIndex = directElementChildren.findIndex((node) => getAttr(node, 'class').includes('agent-thinking-truncation'));
+  const bodyIndex = directElementChildren.findIndex((node) => getAttr(node, 'class').includes('agent-thinking-body'));
+
+  expect(truncationIndex).toBeGreaterThan(-1);
+  expect(bodyIndex).toBeGreaterThan(-1);
+  expect(truncationIndex).toBeLessThan(bodyIndex);
 
   render(null, host);
 });

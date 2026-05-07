@@ -398,6 +398,11 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
         if (!sourceText && !(Number.isFinite(truncated.totalLines) && truncated.totalLines > 0)) return null;
         const bodyClass = `agent-thinking-body${isCollapsible ? ' agent-thinking-body-collapsible' : ''}`;
         const bodyStyle = isCollapsible ? `--agent-thinking-collapsed-lines: ${maxLines};` : '';
+        const collapsedTruncationButton = !isExpanded && truncated.omitted > 0 && html`
+            <button class="agent-thinking-truncation" onClick=${() => toggleExpand(panelKey)}>
+                ▸ ${truncated.omitted} more lines
+            </button>
+        `;
         return html`
             <div
                 class="agent-thinking"
@@ -419,16 +424,13 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
                         </button>
                     `}
                 </div>
+                ${collapseFromTail ? collapsedTruncationButton : null}
                 <div
                     class=${bodyClass}
                     style=${bodyStyle}
                     dangerouslySetInnerHTML=${{ __html: renderThinkingMarkdown(displayText) }}
                 />
-                ${!isExpanded && truncated.omitted > 0 && html`
-                    <button class="agent-thinking-truncation" onClick=${() => toggleExpand(panelKey)}>
-                        ▸ ${truncated.omitted} more lines
-                    </button>
-                `}
+                ${collapseFromTail ? null : collapsedTruncationButton}
                 ${isExpanded && truncated.omitted > 0 && html`
                     <button class="agent-thinking-truncation" onClick=${() => toggleExpand(panelKey)}>
                         ▴ show less
