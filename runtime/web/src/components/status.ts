@@ -325,9 +325,9 @@ function formatElapsed(isoString, nowMs = Date.now()) {
 }
 
 export function AgentStatus({ status, draft, plan, thought, pendingRequest, intent, extensionPanels = [], pendingPanelActions = new Set(), onExtensionPanelAction, turnId, steerQueued, onPanelToggle, showCorePanels = true, showExtensionPanels = true }) {
-    const THOUGHT_MAX_LINES = 8;
-    const DRAFT_MAX_LINES = 8;
-    const TOOL_OUTPUT_MAX_LINES = 5;
+    const THOUGHT_MAX_LINES = 9;
+    const DRAFT_MAX_LINES = 9;
+    const TOOL_OUTPUT_MAX_LINES = 6;
 
     const normalizePreview = (value) => {
         if (!value) return { text: '', totalLines: 0, fullText: '' };
@@ -390,6 +390,8 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
 
     const [expandedPanels, setExpandedPanels] = useState(new Set());
     const [hoveredSeriesPoint, setHoveredSeriesPoint] = useState(null);
+    const [overflowingPanels, setOverflowingPanels] = useState({});
+    const panelBodyRefs = useRef(new Map());
     const [nowMs, setNowMs] = useState(() => Date.now());
     const toggleExpand = (key) =>
         setExpandedPanels(prev => {
@@ -409,6 +411,29 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
     }, [turnId]);
 
     // Tick nowMs every second when visible extension panels expose timestamps.
+    useEffect(() => {
+        const nextOverflowingPanels = {};
+        const bottomPinnedPanelKeys = new Set(['thought', 'draft']);
+        for (const [panelKey, node] of panelBodyRefs.current.entries()) {
+            if (!node || typeof node !== 'object') continue;
+            const scrollHeight = Number(node.scrollHeight);
+            const clientHeight = Number(node.clientHeight);
+            if (!Number.isFinite(scrollHeight) || !Number.isFinite(clientHeight) || clientHeight <= 0) continue;
+            const isOverflowing = scrollHeight > clientHeight + 1;
+            if (isOverflowing) nextOverflowingPanels[panelKey] = true;
+            if (bottomPinnedPanelKeys.has(panelKey)) {
+                node.scrollTop = Math.max(0, scrollHeight - clientHeight);
+            }
+        }
+
+        setOverflowingPanels((previous) => {
+            const previousKeys = Object.keys(previous || {}).filter((key) => previous[key]).sort();
+            const nextKeys = Object.keys(nextOverflowingPanels).sort();
+            if (previousKeys.length === nextKeys.length && previousKeys.every((key, index) => key === nextKeys[index])) return previous;
+            return nextOverflowingPanels;
+        });
+    }, [draftInfo.fullText, draftInfo.text, thoughtInfo.fullText, thoughtInfo.text, toolOutputInfo.fullText, toolOutputInfo.text, expandedPanels]);
+
     useEffect(() => {
         const hasVisibleTimestampPanel = Array.isArray(extensionPanels) && extensionPanels.some(
             (p) => p?.started_at || p?.last_activity_at,
@@ -560,7 +585,6 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
             ? stripInternalTags(rawSourceText)
             : rawSourceText;
         const isCollapsible = typeof maxLines === 'number';
-        const showClose = isExpanded && isCollapsible;
         const collapseFromTail = panelKey === 'tool-output';
         const truncated = isCollapsible
             ? truncateLines(sourceText, maxLines, totalLines, { direction: collapseFromTail ? 'tail' : 'head' })
@@ -571,16 +595,18 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
         if (!sourceText && !(Number.isFinite(truncated.totalLines) && truncated.totalLines > 0)) return null;
         const bodyClass = `agent-thinking-body${isCollapsible ? ' agent-thinking-body-collapsible' : ''}`;
         const bodyStyle = isCollapsible ? `--agent-thinking-collapsed-lines: ${maxLines};` : '';
-        const reserveCollapsedTruncation = collapseFromTail && !isExpanded && isCollapsible;
-        const showCollapsedTruncation = !isExpanded && truncated.omitted > 0;
-        const collapsedTruncationButton = (showCollapsedTruncation || reserveCollapsedTruncation) && html`
+        const estimatedOverflow = isCollapsible && truncated.omitted > 0;
+        const measuredOverflow = Boolean(panelKey && overflowingPanels[panelKey]);
+        const hasOverflow = estimatedOverflow || measuredOverflow;
+        const showCollapsedTruncation = !isExpanded && hasOverflow;
+        const truncationToggleButton = (showCollapsedTruncation || (isExpanded && hasOverflow)) && html`
             <button
-                class=${`agent-thinking-truncation${showCollapsedTruncation ? '' : ' agent-thinking-truncation-placeholder'}`}
-                onClick=${showCollapsedTruncation ? () => toggleExpand(panelKey) : undefined}
-                aria-hidden=${showCollapsedTruncation ? undefined : 'true'}
-                tabindex=${showCollapsedTruncation ? undefined : '-1'}
+                class="agent-thinking-truncation"
+                onClick=${() => toggleExpand(panelKey)}
+                title=${isExpanded ? `Show fewer ${panelTitle} lines` : `Show more ${panelTitle}`}
             >
-                ${showCollapsedTruncation ? `▸ ${truncated.omitted} more lines` : '▸ 0 more lines'}
+                <span class="agent-thinking-truncation-arrow" aria-hidden="true">${isExpanded ? '▲' : '▼'}</span>
+                <span>${isExpanded ? 'less' : 'more…'}</span>
             </button>
         `;
         return html`
@@ -594,28 +620,18 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
                 <div class="agent-thinking-title ${titleClass || ''}">
                     ${turnColor && html`<span class=${dotClass} aria-hidden="true"></span>`}
                     ${panelTitle}
-                    ${showClose && html`
-                        <button
-                            class="agent-thinking-close"
-                            aria-label=${`Close ${panelTitle} panel`}
-                            onClick=${() => toggleExpand(panelKey)}
-                        >
-                            ×
-                        </button>
-                    `}
+                    ${truncationToggleButton}
                 </div>
-                ${collapseFromTail ? collapsedTruncationButton : null}
                 <div
                     class=${bodyClass}
                     style=${bodyStyle}
+                    ref=${(node) => {
+                        if (!panelKey) return;
+                        if (node) panelBodyRefs.current.set(panelKey, node);
+                        else panelBodyRefs.current.delete(panelKey);
+                    }}
                     dangerouslySetInnerHTML=${{ __html: renderThinkingMarkdown(displayText) }}
                 />
-                ${collapseFromTail ? null : collapsedTruncationButton}
-                ${isExpanded && truncated.omitted > 0 && html`
-                    <button class="agent-thinking-truncation" onClick=${() => toggleExpand(panelKey)}>
-                        ▴ show less
-                    </button>
-                `}
             </div>
         `;
     };

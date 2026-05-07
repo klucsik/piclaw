@@ -140,26 +140,46 @@ afterEach(() => {
   (globalThis as any).NodeFilter = originalNodeFilter;
 });
 
-test('expanded thought, draft, and live tool-output panels keep constrained scroll containers', () => {
+test('thought, draft, and live tool-output panels scroll with their configured line limits', () => {
   const css = readFileSync(join(import.meta.dir, '../../web/static/css/agent.css'), 'utf8');
-  expect(css).toContain('.agent-thinking[data-panel-key="thought"][data-expanded="true"] .agent-thinking-body-collapsible');
-  expect(css).toContain('.agent-thinking[data-panel-key="draft"][data-expanded="true"] .agent-thinking-body-collapsible');
+  expect(css).toContain('.agent-thinking[data-panel-key="thought"] .agent-thinking-body-collapsible');
+  expect(css).toContain('.agent-thinking[data-panel-key="draft"] .agent-thinking-body-collapsible');
   expect(css).toContain('.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body-collapsible');
   expect(css).toContain('overflow: hidden auto;');
-  expect(css).toContain('max-height: min(52vh, 34rem);');
-  expect(css).toContain('max-height: min(34vh, 22rem);');
+  expect(css).not.toContain('max-height: min(52vh, 34rem);');
+  expect(css).not.toContain('max-height: min(34vh, 22rem);');
+  expect(css).toContain('max-height: calc((var(--agent-thinking-line-height) * 1em * var(--agent-thinking-collapsed-lines, 9)) + 0.4em);');
+  expect(css).toContain('min-height: calc((var(--agent-thinking-line-height) * 1em * var(--agent-thinking-collapsed-lines, 6)) + 0.4em);');
   expect(css).toContain('.agent-thinking[data-panel-key="tool-output"] .agent-thinking-body');
   expect(css).toContain('--agent-intent-tool-argument-font-size: 0.9em;');
   expect(css).toContain('--agent-tool-output-font-size: 0.8em;');
-  expect(css).toContain('min-height: calc((var(--agent-thinking-line-height) * 1em * 5) + 0.4em);');
   expect(css).toContain('font-family: var(--font-mono, monospace);');
   expect(css).toContain('font-size: var(--agent-tool-output-font-size, 0.8em);');
+  expect(css).toContain('.agent-thinking-truncation');
+  expect(css).toContain('border-radius: 999px;');
+  expect(css).toContain('.agent-thinking-truncation-arrow');
+  expect(css).toContain('font-size: 1.45em;');
 });
 
-test('tool output panel keeps a tighter 5-line collapsed preview cap', () => {
+test('thinking and draft panels use 9 lines while tool output uses 6 lines', () => {
   const source = readFileSync(join(import.meta.dir, '../../web/src/components/status.ts'), 'utf8');
-  expect(source).toContain('const TOOL_OUTPUT_MAX_LINES = 5;');
+  expect(source).toContain('const THOUGHT_MAX_LINES = 9;');
+  expect(source).toContain('const DRAFT_MAX_LINES = 9;');
+  expect(source).toContain('const TOOL_OUTPUT_MAX_LINES = 6;');
   expect(source).toContain('maxLines: TOOL_OUTPUT_MAX_LINES');
+});
+
+test('thinking panel markdown tables match post table formatting while inheriting pane text attributes', () => {
+  const css = readFileSync(join(import.meta.dir, '../../web/static/css/agent.css'), 'utf8');
+  expect(css).toContain('.agent-thinking-body table');
+  expect(css).toContain('.agent-thinking-body th,');
+  expect(css).toContain('.agent-thinking-body td');
+  expect(css).toContain('border-collapse: collapse;');
+  expect(css).toContain('padding: 0.4em 0.75em;');
+  expect(css).toContain('background: color-mix(in srgb, var(--bg-secondary, #f5f5f5) 50%, transparent);');
+  expect(css).toContain('font-family: inherit;');
+  expect(css).toContain('font-size: inherit;');
+  expect(css).toContain('color: inherit;');
 });
 
 test('collapsed tool output lines are capped at 132 characters with an ellipsis', async () => {
@@ -384,15 +404,14 @@ test('AgentStatus labels tool output as Output and shows the tail while collapse
   expect(textOutput).not.toContain('bash: Streaming output...');
 
   const htmlOutput = collectInnerHtml(host).join('\n');
-  expect(htmlOutput).toContain('line 3');
+  expect(htmlOutput).toContain('line 2');
   expect(htmlOutput).toContain('line 7');
   expect(htmlOutput).not.toContain('line 1');
-  expect(htmlOutput).not.toContain('line 2');
 
   render(null, host);
 });
 
-test('AgentStatus reserves tool-output collapsed height and hint space for short output', async () => {
+test('AgentStatus keeps short tool-output collapsed height without a hidden more-lines row', async () => {
   const fakeDocument = new FakeDocument();
   installStatusDomStubs(fakeDocument);
 
@@ -414,21 +433,16 @@ test('AgentStatus reserves tool-output collapsed height and hint space for short
 
   const toolPanel = findElements(host, (node) => getAttr(node, 'data-panel-key') === 'tool-output')[0];
   expect(toolPanel).toBeDefined();
-  const directElementChildren = toolPanel.childNodes.filter((child): child is FakeElement => child instanceof FakeElement);
-  const placeholder = directElementChildren.find((node) => getAttr(node, 'class').includes('agent-thinking-truncation-placeholder'));
-  const bodyIndex = directElementChildren.findIndex((node) => getAttr(node, 'class').includes('agent-thinking-body'));
-  const placeholderIndex = directElementChildren.findIndex((node) => node === placeholder);
+  const truncationButtons = findElements(toolPanel, (node) => getAttr(node, 'class').includes('agent-thinking-truncation'));
+  const body = findElements(toolPanel, (node) => getAttr(node, 'class').includes('agent-thinking-body'))[0];
 
-  expect(placeholder).toBeDefined();
-  expect(getAttr(placeholder!, 'aria-hidden')).toBe('true');
-  expect(placeholderIndex).toBeGreaterThan(-1);
-  expect(bodyIndex).toBeGreaterThan(-1);
-  expect(placeholderIndex).toBeLessThan(bodyIndex);
+  expect(truncationButtons).toHaveLength(0);
+  expect(body).toBeDefined();
 
   render(null, host);
 });
 
-test('AgentStatus truncates long collapsed tool-output lines and places more-lines control above the tail preview', async () => {
+test('AgentStatus truncates long collapsed tool-output lines and places more-lines pill in the title row', async () => {
   const fakeDocument = new FakeDocument();
   installStatusDomStubs(fakeDocument);
 
@@ -453,12 +467,19 @@ test('AgentStatus truncates long collapsed tool-output lines and places more-lin
   const toolPanel = findElements(host, (node) => getAttr(node, 'data-panel-key') === 'tool-output')[0];
   expect(toolPanel).toBeDefined();
   const directElementChildren = toolPanel.childNodes.filter((child): child is FakeElement => child instanceof FakeElement);
-  const truncationIndex = directElementChildren.findIndex((node) => getAttr(node, 'class').includes('agent-thinking-truncation'));
+  const title = directElementChildren.find((node) => getAttr(node, 'class').includes('agent-thinking-title'));
   const bodyIndex = directElementChildren.findIndex((node) => getAttr(node, 'class').includes('agent-thinking-body'));
+  const titleIndex = directElementChildren.findIndex((node) => node === title);
+  const truncationButton = title && findElements(title, (node) => getAttr(node, 'class').includes('agent-thinking-truncation'))[0];
 
-  expect(truncationIndex).toBeGreaterThan(-1);
+  expect(title).toBeDefined();
+  expect(truncationButton).toBeDefined();
+  expect(getAttr(truncationButton!, 'class')).toContain('agent-thinking-truncation');
+  expect(collectText(truncationButton!)).toContain('▼');
+  expect(collectText(truncationButton!)).toContain('more…');
   expect(bodyIndex).toBeGreaterThan(-1);
-  expect(truncationIndex).toBeLessThan(bodyIndex);
+  expect(titleIndex).toBeGreaterThan(-1);
+  expect(titleIndex).toBeLessThan(bodyIndex);
 
   const htmlOutput = collectInnerHtml(host).join('\n');
   expect(htmlOutput).toContain(`${longTailLine.slice(0, 132)}…`);
