@@ -131,6 +131,43 @@ function isRedundantToolStatusText(statusText) {
     return typeof statusText === 'string' && /^streaming output\.{3}$/i.test(statusText.trim());
 }
 
+function normalizeToolStatusPillLabel(statusText) {
+    if (typeof statusText !== 'string') return '';
+    return statusText
+        .replace(/[…]+/g, '.')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/[\s:;,.!?-]+$/g, '')
+        .toLowerCase();
+}
+
+function isToolIntentPayload(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    const type = typeof payload.type === 'string' ? payload.type : '';
+    return type === 'tool_call'
+        || type === 'tool_status'
+        || Boolean(payload.tool_name || payload.toolName || payload.tool_args || payload.toolArgs);
+}
+
+function resolveToolStatusPillLabel(payload) {
+    if (!isToolIntentPayload(payload)) return '';
+    const statusText = payload?.status || payload?.tool_status || payload?.toolStatus;
+    if (isRedundantToolStatusText(statusText)) return '';
+    return normalizeToolStatusPillLabel(statusText);
+}
+
+function stripTrailingToolStatusText(text, statusText) {
+    const value = typeof text === 'string' ? text : '';
+    const rawStatus = typeof statusText === 'string' ? statusText.trim() : '';
+    if (!value || !rawStatus) return value;
+    const escapedStatus = rawStatus.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return value.replace(new RegExp(`\\s*[:—-]\\s*${escapedStatus}\\s*$`, 'i'), '');
+}
+
+function renderToolStatusPill(label) {
+    return label ? html`<span class="agent-tool-status-pill">${label}</span>` : null;
+}
+
 export function resolveAgentStatusContent(status, options = {}) {
     const isLastActivity = options?.isLastActivity ?? Boolean(status?.last_activity || status?.lastActivity);
     const title = status?.title;
@@ -242,24 +279,34 @@ export function resolveBashToolTitleParts(titleText, payload) {
 }
 
 function renderToolArgumentInText(text, payload) {
-    const value = typeof text === 'string' ? text : '';
+    const statusText = payload?.status || payload?.tool_status || payload?.toolStatus;
+    const pillLabel = resolveToolStatusPillLabel(payload);
+    const value = pillLabel ? stripTrailingToolStatusText(text, statusText) : (typeof text === 'string' ? text : '');
     const title = typeof payload?.title === 'string' ? payload.title.trim() : '';
     const parts = resolveToolTitleArgumentParts(title, payload);
-    if (!parts?.argument) return value;
+
+    if (!parts?.argument) {
+        return pillLabel ? html`${value} ${renderToolStatusPill(pillLabel)}` : value;
+    }
 
     const argumentStart = value.lastIndexOf(parts.argument);
-    if (argumentStart < 0) return value;
+    if (argumentStart < 0) {
+        return pillLabel ? html`${value} ${renderToolStatusPill(pillLabel)}` : value;
+    }
     const argumentEnd = argumentStart + parts.argument.length;
     return html`
-        ${value.slice(0, argumentStart)}<span class="agent-tool-argument">${parts.argument}</span>${value.slice(argumentEnd)}
+        ${value.slice(0, argumentStart)}<span class="agent-tool-argument">${parts.argument}</span>${value.slice(argumentEnd)}${pillLabel ? html` ${renderToolStatusPill(pillLabel)}` : ''}
     `;
 }
 
 function renderToolTitle(titleText, payload) {
     const parts = resolveToolTitleArgumentParts(titleText, payload);
     if (!parts?.argument) return titleText;
+    const statusText = payload?.status || payload?.tool_status || payload?.toolStatus;
+    const pillLabel = resolveToolStatusPillLabel(payload);
+    const suffix = pillLabel ? stripTrailingToolStatusText(parts.suffix || '', statusText) : (parts.suffix || '');
     return html`
-        ${parts.prefix}<span class="agent-tool-argument">${parts.argument}</span>${parts.suffix || ''}
+        ${parts.prefix}<span class="agent-tool-argument">${parts.argument}</span>${suffix}${pillLabel ? html` ${renderToolStatusPill(pillLabel)}` : ''}
     `;
 }
 

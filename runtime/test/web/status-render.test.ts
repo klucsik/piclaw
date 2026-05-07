@@ -213,6 +213,8 @@ test('AgentStatus renders bash tool command lines as generic monospace tool argu
   expect(css).toContain('font-family: var(--font-mono, monospace);');
   expect(css).toContain('.agent-thinking-intent .agent-tool-argument');
   expect(css).toContain('font-size: var(--agent-intent-tool-argument-font-size, 0.9em);');
+  expect(css).toContain('.agent-tool-status-pill');
+  expect(css).toContain('text-transform: lowercase;');
 
   const fakeDocument = new FakeDocument();
   installStatusDomStubs(fakeDocument);
@@ -305,6 +307,53 @@ test('AgentStatus renders non-bash tool title arguments in monospace spans', asy
   argumentSpans = findElements(host, (node) => getAttr(node, 'class').includes('agent-tool-argument'));
   expect(argumentSpans).toHaveLength(1);
   expect(collectText(argumentSpans[0])).toBe(query);
+
+  render(null, host);
+});
+
+test('AgentStatus renders trailing tool status text as lowercase pills', async () => {
+  const fakeDocument = new FakeDocument();
+  installStatusDomStubs(fakeDocument);
+
+  const { AgentStatus } = await importFresh<typeof import('../../web/src/components/status.ts')>('../web/src/components/status.ts');
+  const { h, render } = await import('../../web/src/vendor/preact-htm.js');
+
+  const host = fakeDocument.createElement('div');
+  fakeDocument.body.appendChild(host);
+  const command = 'bun test runtime/test/web/status-render.test.ts';
+
+  render(h(AgentStatus, {
+    status: {
+      type: 'tool_status',
+      title: `bash: ${command}`,
+      status: 'Working...',
+      tool_name: 'bash',
+      tool_args: { command },
+    },
+  }), host);
+
+  const textOutput = collectText(host);
+  expect(textOutput).toContain(`bash: ${command} working`);
+  expect(textOutput).not.toContain(': Working...');
+  let pills = findElements(host, (node) => getAttr(node, 'class').includes('agent-tool-status-pill'));
+  expect(pills).toHaveLength(1);
+  expect(collectText(pills[0])).toBe('working');
+
+  render(h(AgentStatus, {
+    status: {
+      type: 'intent',
+      title: `bash: ${command}: Failed`,
+      status: 'Failed',
+      tool_name: 'bash',
+      tool_args: { command },
+    },
+  }), host);
+
+  pills = findElements(host, (node) => getAttr(node, 'class').includes('agent-tool-status-pill'));
+  expect(pills).toHaveLength(1);
+  expect(collectText(pills[0])).toBe('failed');
+  expect(collectText(host)).toContain(`bash: ${command} failed`);
+  expect(collectText(host)).not.toContain(': Failed');
 
   render(null, host);
 });
