@@ -83,7 +83,7 @@ For internal-tool discovery, prefer this order:
 
 That keeps discovery separate from activation and avoids bulky “dump every tool schema first” behavior.
 
-`list_tools(intent=...)` scores explicit tool metadata first (`name`, `description`, `promptSnippet`, toolsets, and capability profiles). `list_internal_tools` remains as a deprecated compatibility alias during migration. When a tool also exposes structured discovery docs/JDocs (for example aliases, domains, verbs, nouns, keywords, guidance, or examples), those are treated as supplemental low-weight hints rather than overrides.
+`list_tools(intent=...)` scores explicit tool metadata first (`name`, `description`, `promptSnippet`, toolsets, and capability profiles). When a tool also exposes structured discovery docs/JDocs (for example aliases, domains, verbs, nouns, keywords, guidance, or examples), those are treated as supplemental low-weight hints rather than overrides.
 
 ### ToolJDoc: supplemental discovery metadata
 
@@ -251,7 +251,7 @@ You can extend that baseline with `.piclaw/config.json`:
 - `schedule_task` — schedule agent prompts or shell commands (cron, interval, or one-shot)
 - `scheduled_tasks` — inspect scheduled-task records via a shared query surface (`list` / `get`, optional latest-run summaries)
 - `introspect_sql` — run read-only SQL queries against the messages database
-- `list_tools` — list available tools with compact summaries, active-state markers, toolset membership, capability metadata, and intent-based recommendations via `intent` (`list_internal_tools` remains as a deprecated compatibility alias during migration)
+- `list_tools` — list available tools with compact summaries, active-state markers, toolset membership, capability metadata, and intent-based recommendations via `intent`
 - `list_scripts` — discover packaged skill scripts plus workspace skill/note scripts with compact summaries, role markers (`entrypoint` vs `module`), Bun invocation hints, and the same kind of query/intent shortlisting used for tool discovery
 - `activate_tools` — activate one or more available tools for the current session
 - `reset_active_tools` — restore the configured default active-tool set for the current session

@@ -404,7 +404,7 @@ Notes:
 ### Default active tools
 
 Piclaw keeps the agent's always-active baseline intentionally small and uses
-`list_tools` and `activate_tools` to enable extra capabilities on demand (`list_internal_tools` remains as a deprecated compatibility alias during migration).
+`list_tools` and `activate_tools` to enable extra capabilities on demand.
 
 #### How tool activation affects token usage
 

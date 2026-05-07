@@ -335,7 +335,7 @@ describe("feature: tool catalog", () => {
     const required = [
       "attach_file", "read_attachment", "export_attachment", "messages",
       "get_model_state", "list_models", "switch_model", "switch_thinking",
-      "list_tools", "list_internal_tools", "list_scripts",
+      "list_tools", "list_scripts",
       "activate_tools", "reset_active_tools", "introspect_sql",
       "search_workspace", "refresh_workspace_index",
       "send_adaptive_card", "send_dashboard_widget",
