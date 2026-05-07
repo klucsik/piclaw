@@ -114,8 +114,6 @@ jobs:
           - platform: linux
             arch: arm64
             runner: ubuntu-24.04-arm
-          # macOS Intel runners are too capacity-constrained for release tags;
-          # publish Apple Silicon macOS artifacts by default.
           - platform: macos
             arch: arm64
             runner: macos-14
@@ -158,8 +156,6 @@ jobs:
           - platform: linux
             arch: arm64
             runner: ubuntu-24.04-arm
-          # macOS Intel runners are too capacity-constrained for release tags;
-          # publish Apple Silicon macOS artifacts by default.
           - platform: macos
             arch: arm64
             runner: macos-14
