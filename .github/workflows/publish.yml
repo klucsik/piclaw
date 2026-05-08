@@ -102,7 +102,7 @@ jobs:
 
   build-portable-artifacts:
     name: Build portable artifact (${{ matrix.platform }}-${{ matrix.arch }})
-    needs: wait-for-integration
+    needs: [wait-for-integration, resolve-runtime-versions]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -135,7 +135,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version-file: BUN_VERSION
+          bun-version: ${{ needs.resolve-runtime-versions.outputs.bun_version }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -152,7 +152,8 @@ jobs:
 
   build-experimental-shell-artifacts:
     name: Build experimental shell (${{ matrix.platform }}-${{ matrix.arch }})
-    needs: wait-for-integration
+    needs: [wait-for-integration, resolve-runtime-versions]
+    timeout-minutes: 45
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -177,7 +178,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version-file: BUN_VERSION
+          bun-version: ${{ needs.resolve-runtime-versions.outputs.bun_version }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
