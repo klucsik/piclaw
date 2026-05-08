@@ -6,6 +6,7 @@ import { buildTurnDotClass, resolveRunningStatusIndicator, shouldShowRunningStat
 import { getStatusElapsedLabel, getStatusRetryCountdownLabel, isCompactionStatus, parseStatusLastEventAt, parseStatusStartedAt, resolveStatusPanelTitle } from '../ui/status-duration.js';
 import { extractToolContextPath } from '../ui/tool-git-context.js';
 import { useConnectionStatusPresentation } from '../ui/connection-status.js';
+import { renderDisclosureTriangle } from '../ui/disclosure-triangle.js';
 
 const COPY_ICON_SVG = html`
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -621,7 +622,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
                 onClick=${() => toggleExpand(panelKey)}
                 title=${isExpanded ? `Show fewer ${panelTitle} lines` : `Show more ${panelTitle}`}
             >
-                <span class="agent-thinking-truncation-arrow" aria-hidden="true">${isExpanded ? '▲' : '▼'}</span>
+                <span class="agent-thinking-truncation-arrow" aria-hidden="true">${renderDisclosureTriangle(isExpanded ? 'up' : 'down')}</span>
                 <span>${isExpanded ? 'less' : 'more…'}</span>
             </button>
         `;
@@ -931,11 +932,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
                                     title=${isExpanded ? 'Collapse details' : 'Expand details'}
                                     onClick=${() => toggleExpand(panelKey)}
                                 >
-                                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        ${isExpanded
-                                            ? html`<polyline points="4 6 8 10 12 6"></polyline>`
-                                            : html`<polyline points="4 10 8 6 12 10"></polyline>`}
-                                    </svg>
+                                    ${renderDisclosureTriangle(isExpanded ? 'down' : 'up')}
                                 </button>
                             `}
                         </div>

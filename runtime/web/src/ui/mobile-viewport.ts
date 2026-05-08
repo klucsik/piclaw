@@ -5,7 +5,25 @@ export function shouldUseStandaloneMobileViewportFix(runtime = {}) {
   return isStandaloneWebAppMode(runtime) && isMobileBrowserMode(runtime);
 }
 
-const STANDALONE_VISUAL_VIEWPORT_CHROME_GAP_MAX_PX = 96;
+function isTextEntryFocused(doc: any): boolean {
+  const active = doc?.activeElement;
+  if (!active) return false;
+  const tagName = String(active.tagName || active.nodeName || '').toLowerCase();
+  if (tagName === 'textarea' || tagName === 'select') return true;
+  if (tagName === 'input') {
+    const type = String(active.type || 'text').toLowerCase();
+    return !['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'].includes(type);
+  }
+  if (active.isContentEditable === true) return true;
+  if (typeof active.closest === 'function') {
+    try {
+      return Boolean(active.closest('[contenteditable="true"], [contenteditable="plaintext-only"]'));
+    } catch (error) {
+      console.debug('[mobile-viewport] Ignoring activeElement.closest failure during keyboard detection.', error);
+    }
+  }
+  return false;
+}
 
 export function readViewportHeight(runtime = {}, options = {}) {
   const win = runtime.window ?? (typeof window !== 'undefined' ? window : null);
@@ -15,11 +33,13 @@ export function readViewportHeight(runtime = {}, options = {}) {
   const hasInnerHeight = Number.isFinite(innerHeight) && innerHeight > 0;
 
   if (hasViewportHeight) {
+    if (options.keyboardActive === true) {
+      const viewportOffsetTop = Number(win?.visualViewport?.offsetTop || 0);
+      const keyboardHeight = viewportHeight + Math.max(0, Number.isFinite(viewportOffsetTop) ? viewportOffsetTop : 0);
+      return Math.round(keyboardHeight);
+    }
     if (options.ignoreStandaloneChromeGap === true && hasInnerHeight && innerHeight > viewportHeight) {
-      const gap = innerHeight - viewportHeight;
-      if (gap > 0 && gap <= STANDALONE_VISUAL_VIEWPORT_CHROME_GAP_MAX_PX) {
-        return Math.round(innerHeight);
-      }
+      return Math.round(innerHeight);
     }
     return Math.round(viewportHeight);
   }
@@ -40,7 +60,8 @@ export function syncStandaloneMobileViewport(runtime = {}, options = {}) {
     return null;
   }
 
-  const height = readViewportHeight({ window: win }, { ignoreStandaloneChromeGap: true });
+  const keyboardActive = isTextEntryFocused(doc);
+  const height = readViewportHeight({ window: win }, { ignoreStandaloneChromeGap: true, keyboardActive });
   if (height && height > 0) {
     doc.documentElement.style.setProperty('--app-height', `${height}px`);
   }

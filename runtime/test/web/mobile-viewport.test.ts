@@ -73,6 +73,35 @@ test('syncStandaloneMobileViewport ignores small standalone visual viewport gaps
   expect(cssVars.get('--app-height')).toBe('800px');
 });
 
+test('syncStandaloneMobileViewport ignores large standalone visual viewport gaps when keyboard is closed', () => {
+  const cssVars = new Map<string, string>();
+  const documentElement = {
+    style: {
+      setProperty: (name: string, value: string) => cssVars.set(name, value),
+    },
+  };
+
+  const height = syncStandaloneMobileViewport({
+    navigator: {
+      standalone: true,
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+      maxTouchPoints: 5,
+    },
+    window: {
+      matchMedia: () => ({ matches: true }),
+      visualViewport: { height: 701.9 },
+      innerHeight: 900,
+    },
+    document: {
+      documentElement,
+      activeElement: null,
+    },
+  });
+
+  expect(height).toBe(900);
+  expect(cssVars.get('--app-height')).toBe('900px');
+});
+
 test('syncStandaloneMobileViewport keeps large visual viewport shrink for virtual keyboard', () => {
   const cssVars = new Map<string, string>();
   const documentElement = {
@@ -94,6 +123,7 @@ test('syncStandaloneMobileViewport keeps large visual viewport shrink for virtua
     },
     document: {
       documentElement,
+      activeElement: { tagName: 'TEXTAREA', type: 'textarea' },
     },
   });
 
@@ -133,8 +163,8 @@ test('syncStandaloneMobileViewport writes app height without resetting page scro
     },
   });
 
-  expect(height).toBe(702);
-  expect(cssVars.get('--app-height')).toBe('702px');
+  expect(height).toBe(900);
+  expect(cssVars.get('--app-height')).toBe('900px');
   expect(windowScrolls).toEqual([]);
   expect(scrollingElement.scrollTop).toBe(91);
   expect(scrollingElement.scrollLeft).toBe(17);
@@ -176,8 +206,8 @@ test('syncStandaloneMobileViewport can reset page scroll when explicitly request
     },
   }, { resetScroll: true });
 
-  expect(height).toBe(702);
-  expect(cssVars.get('--app-height')).toBe('702px');
+  expect(height).toBe(900);
+  expect(cssVars.get('--app-height')).toBe('900px');
   expect(windowScrolls).toEqual([[0, 0]]);
   expect(scrollingElement.scrollTop).toBe(0);
   expect(scrollingElement.scrollLeft).toBe(0);

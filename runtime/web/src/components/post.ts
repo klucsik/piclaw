@@ -8,6 +8,7 @@ import { getAttachmentPreviewKind, getAttachmentPreviewLabel } from '../ui/attac
 import { extractCardBlocks, renderAdaptiveCard } from '../ui/adaptive-card-renderer.js';
 import { buildAdaptiveCardSubmissionFallbackText, describeAdaptiveCardSubmission, extractAdaptiveCardSubmissionBlocks } from '../ui/adaptive-card-submission.js';
 import { buildGeneratedWidgetPayload, canRenderGeneratedWidget } from '../ui/generated-widget.js';
+import { disclosureTriangleSvgString, renderDisclosureTriangle } from '../ui/disclosure-triangle.js';
 import { ImageModal } from './image-modal.js';
 import { FilePill } from './file-pill.js';
 import { buildSpeakablePostText, getSpeechPlaybackState, isSpeechSynthesisSupported, speakPostText, stopSpeechPlayback, subscribeSpeechPlayback } from './post-speech.ts';
@@ -190,7 +191,7 @@ function OutcomePill({ marker }) {
         <div class=${`post-outcome-pill post-outcome-pill-${severity}`}>
             <div class="post-outcome-pill-header" onClick=${hasDetail ? toggle : undefined}>
                 ${hasDetail && html`
-                    <span class=${`post-outcome-pill-toggle${expanded ? ' expanded' : ''}`} aria-hidden="true">▶</span>
+                    <span class="post-outcome-pill-toggle" aria-hidden="true">${renderDisclosureTriangle(expanded ? 'down' : 'right')}</span>
                 `}
                 <span class="post-outcome-pill-label">${label}</span>
                 ${draftRecovered && html`<span class="post-outcome-pill-badge">draft recovered</span>`}
@@ -330,7 +331,7 @@ function ResourceBlock({ block }) {
     return html`
         <div class="resource-embed">
             <button class="resource-embed-toggle" onClick=${(e) => { e.preventDefault(); e.stopPropagation(); setOpen(!open); }}>
-                ${open ? '▼' : '▶'} ${title}
+                ${renderDisclosureTriangle(open ? 'down' : 'right')} ${title}
             </button>
             ${open && html`
                 ${contentText && html`<pre class="resource-embed-content">${contentText}</pre>`}
@@ -656,9 +657,9 @@ function enhanceCodeBlocks(container) {
             toggle.className = 'post-code-expand-btn';
             const updateToggle = () => {
                 const expanded = wrapper.classList.contains('post-code-block-expanded');
-                toggle.textContent = expanded
-                    ? '▴ Collapse output'
-                    : `▸ Expand output · ${blockMeta.lineCount.toLocaleString()} lines · ${formatFileSize(blockMeta.byteLength)}${blockMeta.omittedLines ? ` · ${blockMeta.omittedLines.toLocaleString()} hidden` : ''}`;
+                toggle.innerHTML = expanded
+                    ? `${disclosureTriangleSvgString('up')} <span>Collapse output</span>`
+                    : `${disclosureTriangleSvgString('right')} <span>Expand output · ${blockMeta.lineCount.toLocaleString()} lines · ${formatFileSize(blockMeta.byteLength)}${blockMeta.omittedLines ? ` · ${blockMeta.omittedLines.toLocaleString()} hidden` : ''}</span>`;
                 toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
             };
             const handleToggleClick = (event) => {

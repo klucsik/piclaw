@@ -160,7 +160,7 @@ test('thought, draft, and live tool-output panels scroll with their configured l
   expect(css).toContain('.agent-thinking-truncation');
   expect(css).toContain('border-radius: 999px;');
   expect(css).toContain('.agent-thinking-truncation-arrow');
-  expect(css).toContain('font-size: 1.45em;');
+  expect(css).toContain('min-width: var(--ui-disclosure-triangle-size);');
 });
 
 test('thinking and draft panels use 9 lines while tool output uses 6 lines', () => {
@@ -540,7 +540,8 @@ test('AgentStatus truncates long collapsed tool-output lines and places more-lin
   expect(title).toBeDefined();
   expect(truncationButton).toBeDefined();
   expect(getAttr(truncationButton!, 'class')).toContain('agent-thinking-truncation');
-  expect(collectText(truncationButton!)).toContain('▼');
+  const triangle = findElements(truncationButton!, (node) => getAttr(node, 'class').includes('ui-disclosure-triangle-down'))[0];
+  expect(triangle).toBeDefined();
   expect(collectText(truncationButton!)).toContain('more…');
   expect(bodyIndex).toBeGreaterThan(-1);
   expect(titleIndex).toBeGreaterThan(-1);

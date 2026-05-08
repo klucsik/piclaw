@@ -30,8 +30,13 @@ test("hides compose agent affordance when there are no visible agents", () => {
   })).toBe(false);
 });
 
-test("mobile compose layout does not reserve indicator width inside the textarea", () => {
+test("mobile compose layout keeps the session switcher floated above the textarea", () => {
+  const triggerRules = [...responsiveCss.matchAll(/\.compose-session-trigger-top\s*\{[^}]+\}/g)].map(([rule]) => rule);
+
+  expect(triggerRules.length).toBeGreaterThanOrEqual(2);
   expect(responsiveCss).toContain(".compose-session-trigger-top + .compose-input-main textarea");
-  expect(responsiveCss).toContain("padding-right: calc(var(--spacing-xs) + 28px);");
-  expect(responsiveCss).toContain("position: static;");
+  expect(responsiveCss).toContain("position: absolute;");
+  expect(responsiveCss).toContain("z-index: 7;");
+  expect(responsiveCss).toContain("padding-right: max(calc(var(--spacing-xs) + 28px), min(44vw, 156px));");
+  expect(triggerRules.every((rule) => !rule.includes("position: static;"))).toBe(true);
 });

@@ -1,6 +1,7 @@
 import { html, useEffect, useMemo, useState } from '../vendor/preact-htm.js';
 import { getSystemMetrics } from '../api.js';
 import { METERS_COLLAPSED_EVENT_NAME, METERS_EVENT_NAME, applyMetersCollapsed, readStoredMetersCollapsed, readStoredMetersEnabled } from '../ui/meters.js';
+import { renderDisclosureTriangle } from '../ui/disclosure-triangle.js';
 
 function sanitizeSeries(input, maxPoints = 30) {
     const series = Array.isArray(input)
@@ -251,7 +252,7 @@ export function SystemMetersHud({ mode = 'overlay' }) {
                 onClick=${handleToggleCollapsed}
             >
                 ${collapsed
-                    ? html`<span class="system-meters-collapse-tab" aria-hidden="true">◂</span>`
+                    ? html`<span class="system-meters-collapse-tab" aria-hidden="true">${renderDisclosureTriangle('left')}</span>`
                     : isNarrowLayout
                         ? html`<span class="system-meters-compact-summary">${compactSummary}</span>`
                         : html`

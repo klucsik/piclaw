@@ -14,7 +14,7 @@
     --workspace-row-height: 22px;
     --workspace-row-gap: 2px;
     --workspace-caret-box-size: 14px;
-    --workspace-caret-icon-size: 8px;
+    --workspace-caret-icon-size: var(--ui-disclosure-triangle-size);
     --workspace-file-icon-size: 14px;
     --workspace-folder-icon-size: 16px;
     --workspace-folder-upload-icon-size: 13px;
@@ -43,7 +43,7 @@
     --workspace-row-height: 20px;
     --workspace-row-gap: 2px;
     --workspace-caret-box-size: 13px;
-    --workspace-caret-icon-size: 7px;
+    --workspace-caret-icon-size: var(--ui-disclosure-triangle-size);
     --workspace-file-icon-size: 13px;
     --workspace-folder-icon-size: 15px;
     --workspace-folder-upload-icon-size: 12px;
@@ -61,7 +61,7 @@
     --workspace-row-height: 22px;
     --workspace-row-gap: 2px;
     --workspace-caret-box-size: 14px;
-    --workspace-caret-icon-size: 8px;
+    --workspace-caret-icon-size: var(--ui-disclosure-triangle-size);
     --workspace-file-icon-size: 14px;
     --workspace-folder-icon-size: 16px;
     --workspace-folder-upload-icon-size: 13px;
@@ -79,7 +79,7 @@
     --workspace-row-height: 28px;
     --workspace-row-gap: 4px;
     --workspace-caret-box-size: 16px;
-    --workspace-caret-icon-size: 9px;
+    --workspace-caret-icon-size: var(--ui-disclosure-triangle-size);
     --workspace-file-icon-size: 16px;
     --workspace-folder-icon-size: 18px;
     --workspace-folder-upload-icon-size: 15px;

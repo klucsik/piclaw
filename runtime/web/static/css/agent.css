@@ -10,7 +10,7 @@
     align-items: center;
     gap: var(--spacing-sm);
     padding: calc(var(--spacing-md) / 2);
-    margin: 0 var(--spacing-sm);
+    margin: 0;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-bottom-color: transparent;
@@ -266,7 +266,7 @@
 
 .agent-thinking {
     padding: var(--chat-surface-padding-y) var(--chat-surface-padding-x);
-    margin: 0 var(--spacing-sm);
+    margin: 0;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-bottom-color: transparent;
@@ -522,10 +522,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 0.9em;
-    font-size: 1.45em;
-    line-height: 0.72;
-    transform: translateY(-0.01em);
+    min-width: var(--ui-disclosure-triangle-size);
+    line-height: 1;
 }
 
 .agent-thinking-truncation:hover,
