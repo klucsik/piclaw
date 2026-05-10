@@ -252,14 +252,10 @@ describe("smart-compaction", () => {
     expect(result.compaction.firstKeptEntryId).toBe("kept-entry-1");
     expect(result.compaction.tokensBefore).toBe(6000);
 
-    // Should notify progress
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Smart compaction:"),
-      "info",
-    );
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      "Smart compaction complete ✓",
-      "info",
+    // Should use standard working-status feedback without notification/message panes.
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
+    expect(ctx.ui.setWorkingMessage).toHaveBeenCalledWith(
+      expect.stringContaining("Smart compaction: generating selective summary"),
     );
     expect(ctx.ui.setStatus).toHaveBeenCalledWith(
       "context_usage",
@@ -464,10 +460,7 @@ describe("smart-compaction", () => {
     );
 
     expect(result).toBeUndefined();
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Smart compaction LLM error"),
-      "warning",
-    );
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
   });
 
   it("falls through on too-short summary", async () => {
@@ -487,10 +480,7 @@ describe("smart-compaction", () => {
     );
 
     expect(result).toBeUndefined();
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("too short"),
-      "warning",
-    );
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
   });
 
   it("falls through when no auth is available", async () => {
@@ -524,10 +514,7 @@ describe("smart-compaction", () => {
     );
 
     expect(result).toBeUndefined();
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Network error"),
-      "warning",
-    );
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
   });
 
   it("respects abort signal", async () => {
@@ -695,7 +682,8 @@ describe("smart-compaction", () => {
       const prompts = (completeSimple as any).mock.calls.map((call: any[]) => call[1].messages[0].content[0].text as string);
       expect(prompts.filter((prompt: string) => prompt.includes("deterministic chunk")).length).toBeGreaterThan(1);
       expect(prompts.at(-1)).toContain("Ordered Intermediate Summaries");
-      expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Progressive compaction"), "info");
+      expect(ctx.ui.notify).not.toHaveBeenCalled();
+      expect(ctx.ui.setWorkingMessage).toHaveBeenCalledWith(expect.stringContaining("Smart compaction:"));
     });
   });
 
@@ -869,10 +857,10 @@ describe("smart-compaction", () => {
       expect(result.compaction.summary).toContain("split-turn"); // mechanical delta
       expect(result.compaction.summary).toContain("<modified-files>"); // file lists updated
 
-      // Should notify
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
+      // Should use working-status feedback without notification/message panes.
+      expect(ctx.ui.notify).not.toHaveBeenCalled();
+      expect(ctx.ui.setWorkingMessage).toHaveBeenCalledWith(
         expect.stringContaining("split-turn continuation"),
-        "info",
       );
     });
 
@@ -921,9 +909,9 @@ describe("smart-compaction", () => {
       expect(result).toBeDefined();
       expect(result.compaction.summary).toContain("Explore codebase");
 
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("minimal content"),
-        "info",
+      expect(ctx.ui.notify).not.toHaveBeenCalled();
+      expect(ctx.ui.setWorkingMessage).toHaveBeenCalledWith(
+        expect.stringContaining("minimal-content compaction"),
       );
     });
 
@@ -1324,10 +1312,7 @@ describe("smart-compaction", () => {
       expect(completeSimple).toHaveBeenCalledTimes(1);
       expect(result).toBeDefined();
       expect(result.compaction.summary).toContain("Azure streaming");
-      expect(ctx.ui.notify).not.toHaveBeenCalledWith(
-        expect.stringContaining("minimal content"),
-        "info",
-      );
+      expect(ctx.ui.notify).not.toHaveBeenCalled();
     });
   });
 
