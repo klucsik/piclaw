@@ -619,3 +619,46 @@ export function highlightCodeLinesAsHtml(code: string, lang: string): string[] {
 
   return result;
 }
+export function extensionToLanguage(filePath: string): string {
+    const ext = (filePath.match(/\.([^.]+)$/) || [])[1]?.toLowerCase() || '';
+    // Direct extension mapping — covers the most common cases
+    const map: Record<string, string> = {
+        ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
+        py: 'python', rb: 'ruby', rs: 'rust', go: 'go', java: 'java',
+        c: 'c', h: 'c', cc: 'cpp', cpp: 'cpp', cxx: 'cpp', hpp: 'cpp', hxx: 'cpp',
+        cs: 'csharp', swift: 'swift', kt: 'kotlin',
+        sh: 'shell', bash: 'bash', zsh: 'zsh', fish: 'shell',
+        ps1: 'powershell', psm1: 'powershell',
+        json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml',
+        xml: 'xml', html: 'html', htm: 'html', css: 'css', scss: 'sass', sass: 'sass',
+        sql: 'sql', graphql: 'graphql', gql: 'graphql',
+        dockerfile: 'dockerfile', makefile: 'makefile',
+        lua: 'lua', perl: 'perl', pl: 'perl', pm: 'perl',
+        r: 'r', jl: 'julia', hs: 'haskell', erl: 'erlang',
+        clj: 'clojure', scm: 'scheme', elm: 'elm',
+        ex: 'elixir', exs: 'elixir',
+        proto: 'protobuf', tf: 'hcl',
+        diff: 'diff', patch: 'diff',
+        ini: 'properties', conf: 'nginx', cfg: 'properties',
+        v: 'verilog', sv: 'verilog', vhd: 'vhdl', vhdl: 'vhdl',
+        pas: 'pascal', f90: 'fortran', f95: 'fortran',
+        cmake: 'cmake', groovy: 'groovy', gradle: 'groovy',
+        tex: 'stex', latex: 'stex', bib: 'stex',
+        d: 'd', nim: 'nim', zig: 'zig',
+        pug: 'pug', jade: 'pug', styl: 'stylus',
+        coffee: 'coffeescript',
+        tcl: 'tcl', ml: 'mllike', sml: 'mllike', fs: 'mllike',
+        wasm: 'wast', wat: 'wast',
+        pp: 'puppet', feature: 'gherkin',
+        ttl: 'turtle', rq: 'sparql', xq: 'xquery',
+    };
+    // Special filenames
+    const basename = filePath.split('/').pop()?.toLowerCase() || '';
+    if (basename === 'dockerfile' || basename.startsWith('dockerfile.')) return 'dockerfile';
+    if (basename === 'makefile' || basename === 'gnumakefile') return 'cmake'; // close enough
+    if (basename === '.env' || basename.endsWith('.env')) return 'properties';
+    if (basename === 'cmakelists.txt') return 'cmake';
+    if (basename === 'vagrantfile' || basename === 'rakefile' || basename === 'gemfile') return 'ruby';
+
+    return map[ext] || '';
+}

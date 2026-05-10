@@ -266,7 +266,7 @@ describe("smart-compaction", () => {
       .filter(([key]: [string]) => key === "context_usage")
       .map(([, text]: [string, string]) => JSON.parse(text));
     expect(contextStatusPayloads.map((payload: any) => payload.phase)).toEqual(
-      expect.arrayContaining(["scanning", "generating_summary", "completed_estimate"]),
+      expect.arrayContaining(["scanning", "generating_summary", "completed_selective"]),
     );
     expect(contextStatusPayloads[0]).toMatchObject({
       tokens: 6000,

@@ -37,6 +37,15 @@ import { createLogger } from "../utils/logger.js";
 const log = createLogger("ext.smart-compaction");
 
 // ---------------------------------------------------------------------------
+// Env helpers (must precede constant definitions that reference them)
+// ---------------------------------------------------------------------------
+
+function parsePositiveEnvInt(name: string): number | null {
+  const parsed = Number.parseInt(String(process.env[name] || "").trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+// ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
@@ -77,6 +86,42 @@ const PROGRESSIVE_INPUT_CONTEXT_FRACTION = 0.42;
 
 /** Keep chunk prompts smaller than final merge prompts; smaller models need room to answer. */
 const PROGRESSIVE_CHUNK_FRACTION = 0.72;
+
+// ---------------------------------------------------------------------------
+// Overhead & safety margin constants
+// ---------------------------------------------------------------------------
+
+/**
+ * Estimated token overhead for system prompt, AGENTS.md, tool definitions,
+ * skills, memory, plan sidebar, and other per-request framing that is NOT
+ * part of the conversation messages but occupies context window space.
+ *
+ * This overhead is invisible to estimateContextTokens (which only counts
+ * messages) but counts against the model's context limit. Without accounting
+ * for it, compaction can produce a summary that fits in the "message budget"
+ * but overflows when combined with the system prompt.
+ *
+ * Conservative estimate: ~4000 tokens (AGENTS.md ~2k, tools ~1k, skills/memory ~1k).
+ * Can be overridden via PICLAW_SYSTEM_PROMPT_OVERHEAD_TOKENS.
+ */
+const SYSTEM_PROMPT_OVERHEAD_TOKENS = parsePositiveEnvInt("PICLAW_SYSTEM_PROMPT_OVERHEAD_TOKENS") ?? 4_000;
+
+/**
+ * Safety margin applied to all budget calculations. Accounts for:
+ * - Token estimation inaccuracy (chars/4 is approximate)
+ * - Provider-side token counting differences
+ * - Summary generation variability
+ */
+const BUDGET_SAFETY_MARGIN = 0.85;
+
+/** Maximum progressive compaction chunks to prevent cost explosion. */
+const MAX_PROGRESSIVE_CHUNKS = 10;
+
+/** Maximum fraction of context window that keepRecentTokens may consume. */
+const MAX_KEEP_RECENT_FRACTION = 0.50;
+
+/** Elapsed-time guard: abort progressive compaction if approaching timeout. */
+const PROGRESSIVE_TIME_BUDGET_FRACTION = 0.80;
 
 // ---------------------------------------------------------------------------
 // Live context usage estimates
@@ -1042,6 +1087,46 @@ function buildSelectivePrompt(
 // Progressive iterative compaction
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Post-compaction verification and keepRecentTokens clamping
+// ---------------------------------------------------------------------------
+
+/**
+ * Clamp keepRecentTokens to at most MAX_KEEP_RECENT_FRACTION of the effective
+ * context window (after subtracting system prompt overhead). Prevents the kept
+ * window from consuming so much context that summary + system prompt + tools
+ * don't fit.
+ */
+export function clampKeepRecentTokens(keepRecentTokens: number, contextWindow: number): number {
+  const effectiveWindow = Math.max(4_000, contextWindow - SYSTEM_PROMPT_OVERHEAD_TOKENS);
+  const maxKeep = Math.floor(effectiveWindow * MAX_KEEP_RECENT_FRACTION);
+  return Math.min(keepRecentTokens, maxKeep);
+}
+
+/**
+ * Estimate whether the post-compaction context will fit in the model's window.
+ * Returns the estimated total and whether it overflows.
+ */
+export function estimatePostCompactionFit(summary: string, keepRecentTokens: number, contextWindow: number): {
+  estimatedTotal: number;
+  fits: boolean;
+  summaryTokens: number;
+  overheadTokens: number;
+  margin: number;
+} {
+  const summaryTokens = estimateTokensFromChars(summary);
+  const overheadTokens = SYSTEM_PROMPT_OVERHEAD_TOKENS;
+  const estimatedTotal = summaryTokens + keepRecentTokens + overheadTokens;
+  const margin = contextWindow - estimatedTotal;
+  return {
+    estimatedTotal,
+    fits: margin > 0,
+    summaryTokens,
+    overheadTokens,
+    margin,
+  };
+}
+
 export interface ProgressiveCompactionBudget {
   contextWindow: number;
   promptBudgetChars: number;
@@ -1058,11 +1143,6 @@ export interface ProgressiveCompactionChunk {
   estimatedChars: number;
 }
 
-function parsePositiveEnvInt(name: string): number | null {
-  const parsed = Number.parseInt(String(process.env[name] || "").trim(), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
 export function getProgressiveCompactionBudget(model: unknown): ProgressiveCompactionBudget {
   const anyModel = model as { contextWindow?: number; contextLength?: number } | null | undefined;
   const reported = typeof anyModel?.contextWindow === "number" && Number.isFinite(anyModel.contextWindow) && anyModel.contextWindow > 0
@@ -1071,8 +1151,14 @@ export function getProgressiveCompactionBudget(model: unknown): ProgressiveCompa
       ? anyModel.contextLength
       : PROGRESSIVE_FALLBACK_CONTEXT_WINDOW;
   const contextWindow = Math.max(8_000, Math.trunc(reported));
+  // Subtract system prompt overhead before computing input budgets.
+  // The overhead (AGENTS.md, tools, skills, memory) is invisible to message
+  // token estimates but eats real context space.
+  const effectiveWindow = Math.max(4_000, contextWindow - SYSTEM_PROMPT_OVERHEAD_TOKENS);
   const envBudget = parsePositiveEnvInt("PICLAW_PROGRESSIVE_COMPACTION_PROMPT_CHARS");
-  const promptBudgetChars = envBudget ?? Math.max(10_000, Math.min(MAX_PROMPT_CHARS, Math.floor(contextWindow * 4 * PROGRESSIVE_INPUT_CONTEXT_FRACTION)));
+  const rawPromptBudget = envBudget ?? Math.max(10_000, Math.min(MAX_PROMPT_CHARS, Math.floor(effectiveWindow * 4 * PROGRESSIVE_INPUT_CONTEXT_FRACTION)));
+  // Apply safety margin: leave room for estimation inaccuracy
+  const promptBudgetChars = Math.floor(rawPromptBudget * BUDGET_SAFETY_MARGIN);
   const chunkBudgetChars = Math.max(6_000, Math.floor(promptBudgetChars * PROGRESSIVE_CHUNK_FRACTION));
   const mergeBudgetChars = Math.max(8_000, promptBudgetChars);
   return {
@@ -1362,12 +1448,35 @@ async function runProgressiveCompaction(input: {
   budget: ProgressiveCompactionBudget;
   abortSignal: AbortSignal;
   ctx: { ui: { setWorkingMessage?: (msg?: string) => void; notify?: (msg: string, level?: "info" | "warning" | "error") => void } };
+  /** Compaction timeout (ms) — used to enforce a time budget so progressive doesn't run over. */
+  timeoutMs?: number;
+  /** Timestamp when compaction started — paired with timeoutMs for elapsed-time guard. */
+  startedAt?: number;
+  /** Callback to publish context estimate to the UI meter. */
+  publishEstimate?: (tokens: number, phase: string) => void;
 }): Promise<string> {
-  const chunks = buildProgressiveCompactionChunks(
+  let allChunks = buildProgressiveCompactionChunks(
     input.llmMessages,
     input.budget.chunkBudgetChars,
     input.humanUserIndexes,
   );
+
+  // Guard: cap chunk count to prevent cost/time explosion
+  if (allChunks.length > MAX_PROGRESSIVE_CHUNKS) {
+    // Re-chunk with a larger budget to stay within the cap
+    const enlargedBudget = Math.ceil(input.llmMessages.reduce((n, m) => n + (extractText(m.content).length || 50), 0) / MAX_PROGRESSIVE_CHUNKS);
+    allChunks = buildProgressiveCompactionChunks(
+      input.llmMessages,
+      Math.max(input.budget.chunkBudgetChars, enlargedBudget),
+      input.humanUserIndexes,
+    );
+    input.ctx.ui.notify?.(
+      `Progressive compaction: re-chunked to ${allChunks.length} chunks (capped from original, budget ${Math.round(enlargedBudget / 1000)}k chars/chunk)`,
+      "info",
+    );
+  }
+
+  const chunks = allChunks;
   const maxTokens = Math.floor(0.8 * input.settings.reserveTokens);
   input.ctx.ui.notify?.(
     `Progressive compaction: ${input.llmMessages.length} messages → ${chunks.length} chunks (budget ${Math.round(input.budget.chunkBudgetChars / 1000)}k chars/chunk)`,
@@ -1376,7 +1485,19 @@ async function runProgressiveCompaction(input: {
 
   const chunkSummaries: string[] = [];
   for (const chunk of chunks) {
+    // Time budget guard: abort if we've consumed most of the timeout
+    if (input.timeoutMs && input.startedAt) {
+      const elapsed = Date.now() - input.startedAt;
+      if (elapsed > input.timeoutMs * PROGRESSIVE_TIME_BUDGET_FRACTION) {
+        input.ctx.ui.notify?.(
+          `Progressive compaction: time budget exhausted (${Math.round(elapsed / 1000)}s of ${Math.round(input.timeoutMs / 1000)}s), merging ${chunkSummaries.length} completed chunks`,
+          "warning",
+        );
+        break;
+      }
+    }
     input.ctx.ui.setWorkingMessage?.(`Smart compaction: summarizing chunk ${chunk.index}/${chunks.length}…`);
+    input.publishEstimate?.(estimateTokensFromChars(chunk.text), `progressive_chunk_${chunk.index}`);
     chunkSummaries.push(await completeCompactionPrompt(
       input.model,
       input.auth,
@@ -1385,6 +1506,10 @@ async function runProgressiveCompaction(input: {
       input.abortSignal,
     ));
     input.ctx.ui.notify?.(`Progressive compaction: chunk ${chunk.index}/${chunks.length} summarized`, "info");
+  }
+
+  if (chunkSummaries.length === 0) {
+    throw new Error("Progressive compaction produced no chunk summaries (time budget exhausted before first chunk)");
   }
 
   return await mergeProgressiveSummaries({
@@ -1842,12 +1967,32 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         ctx,
       );
       if (noOpResult) {
-        publishContextEstimate(ctx, estimateTokensFromChars(noOpResult.compaction.summary) + Math.max(0, Number(settings.keepRecentTokens) || 0), "completed_estimate");
-        return noOpResult;
+        const clampedKeep = clampKeepRecentTokens(Math.max(0, Number(settings.keepRecentTokens) || 0), getContextWindowEstimate(ctx) || PROGRESSIVE_FALLBACK_CONTEXT_WINDOW);
+        const postFit = estimatePostCompactionFit(noOpResult.compaction.summary, clampedKeep, getContextWindowEstimate(ctx) || PROGRESSIVE_FALLBACK_CONTEXT_WINDOW);
+        publishContextEstimate(ctx, postFit.estimatedTotal, "completed_noop");
+        if (!postFit.fits) {
+          ctx.ui.notify(`No-op compaction: post-compaction estimate ${postFit.estimatedTotal} tokens exceeds ${getContextWindowEstimate(ctx) || '?'} context (margin ${postFit.margin}). Falling through to LLM compaction.`, "warning");
+          // Don't return the no-op — fall through to LLM-based compaction
+        } else {
+          return noOpResult;
+        }
       }
 
       // Short conversations → built-in full-pass is fine
-      if (messagesToSummarize.length < SELECTIVE_THRESHOLD) return;
+      if (messagesToSummarize.length < SELECTIVE_THRESHOLD) {
+        publishContextEstimate(ctx, tokensBefore, "builtin_fallback");
+        return;
+      }
+
+      const compactionStartedAt = Date.now();
+      const contextWindow = getContextWindowEstimate(ctx) || PROGRESSIVE_FALLBACK_CONTEXT_WINDOW;
+      const clampedKeepRecent = clampKeepRecentTokens(Math.max(0, Number(settings.keepRecentTokens) || 0), contextWindow);
+      if (clampedKeepRecent < (settings.keepRecentTokens || 0)) {
+        ctx.ui.notify(
+          `keepRecentTokens clamped from ${settings.keepRecentTokens} to ${clampedKeepRecent} (${Math.round(MAX_KEEP_RECENT_FRACTION * 100)}% of ${contextWindow} effective context)`,
+          "info",
+        );
+      }
 
       ctx.ui.setWorkingMessage(`Smart compaction: extracting signal from ${messagesToSummarize.length} messages…`);
       publishContextEstimate(ctx, tokensBefore, "extracting");
@@ -1904,15 +2049,23 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
             budget,
             abortSignal,
             ctx,
+            timeoutMs: 180_000,
+            startedAt: compactionStartedAt,
+            publishEstimate: (tokens, phase) => publishContextEstimate(ctx, tokens, phase),
           });
           const fullSummary = progressiveSummary.includes("<read-files>") || progressiveSummary.includes("<modified-files>")
             ? progressiveSummary
             : appendFileLists(progressiveSummary, preparation.fileOps);
-          publishContextEstimate(
-            ctx,
-            estimateTokensFromChars(fullSummary) + Math.max(0, Number(settings.keepRecentTokens) || 0),
-            "completed_estimate",
-          );
+
+          // Post-compaction fit verification
+          const postFit = estimatePostCompactionFit(fullSummary, clampedKeepRecent, contextWindow);
+          publishContextEstimate(ctx, postFit.estimatedTotal, "completed_progressive");
+          if (!postFit.fits) {
+            ctx.ui.notify(
+              `⚠️ Progressive compaction: post-compaction estimate ${postFit.estimatedTotal} tokens still exceeds ${contextWindow} context window (summary ${postFit.summaryTokens}t + kept ${clampedKeepRecent}t + overhead ${postFit.overheadTokens}t, margin ${postFit.margin}t)`,
+              "warning",
+            );
+          }
           ctx.ui.notify("Progressive compaction complete ✓", "info");
           return {
             compaction: {
@@ -1999,9 +2152,18 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
 
         publishContextEstimate(
           ctx,
-          estimateTokensFromChars(fullSummary) + Math.max(0, Number(settings.keepRecentTokens) || 0),
-          "completed_estimate",
+          estimatePostCompactionFit(fullSummary, clampedKeepRecent, contextWindow).estimatedTotal,
+          "completed_selective",
         );
+
+        // Post-compaction fit verification
+        const postFit = estimatePostCompactionFit(fullSummary, clampedKeepRecent, contextWindow);
+        if (!postFit.fits) {
+          ctx.ui.notify(
+            `⚠️ Single-pass compaction: post-compaction estimate ${postFit.estimatedTotal} tokens still exceeds ${contextWindow} context window (summary ${postFit.summaryTokens}t + kept ${clampedKeepRecent}t + overhead ${postFit.overheadTokens}t, margin ${postFit.margin}t)`,
+            "warning",
+          );
+        }
         ctx.ui.notify("Smart compaction complete ✓", "info");
 
         return {
@@ -2022,6 +2184,9 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         return; // fall through to built-in
       }
     } finally {
+      // Always broadcast a final context estimate so the meter is never stale
+      // after compaction completes, fails, or is cancelled.
+      publishContextEstimate(ctx, tokensBefore, "compaction_done");
       ctx.ui.setWorkingMessage(undefined);
       ctx.ui.setWorkingIndicator({ frames: [] });
     }
