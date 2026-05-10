@@ -13,10 +13,7 @@ export { vncPaneExtension, VNC_TAB_PREFIX, buildVncTabPath } from './vnc-pane.js
 export { workspacePreviewPaneExtension, workspaceMarkdownPreviewPaneExtension } from './workspace-preview-pane.js';
 export { officeViewerPaneExtension } from './office-viewer-pane.js';
 export { dataViewerPaneExtension } from './data-viewer-pane.js';
-export { pdfViewerPaneExtension } from './pdf-viewer-pane.js';
-export { imageViewerPaneExtension } from './image-viewer-pane.js';
-export { htmlViewerPaneExtension } from './html-viewer-pane.js';
-export { videoViewerPaneExtension } from './video-viewer-pane.js';
+export { webViewerPaneExtension } from './web-viewer-pane.js';
 export { mindmapPaneExtension } from './mindmap-pane.js';
 export type { TabState, TabViewState } from './tab-store.js';
 export { tabStore } from './tab-store.js';

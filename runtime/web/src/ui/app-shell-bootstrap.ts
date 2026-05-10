@@ -10,10 +10,7 @@ import {
   workspaceMarkdownPreviewPaneExtension,
   officeViewerPaneExtension,
   dataViewerPaneExtension,
-  pdfViewerPaneExtension,
-  imageViewerPaneExtension,
-  htmlViewerPaneExtension,
-  videoViewerPaneExtension,
+  webViewerPaneExtension,
   mindmapPaneExtension,
 } from '../panes/index.js';
 import {
@@ -62,10 +59,7 @@ export function registerAppPaneExtensions(): void {
   paneRegistry.register(workspaceMarkdownPreviewPaneExtension);
   paneRegistry.register(officeViewerPaneExtension);
   paneRegistry.register(dataViewerPaneExtension);
-  paneRegistry.register(pdfViewerPaneExtension);
-  paneRegistry.register(imageViewerPaneExtension);
-  paneRegistry.register(htmlViewerPaneExtension);
-  paneRegistry.register(videoViewerPaneExtension);
+  paneRegistry.register(webViewerPaneExtension);
   paneRegistry.register(mindmapPaneExtension);
   paneRegistry.register(vncPaneExtension);
   preloadEditorBundle();
