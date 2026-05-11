@@ -322,7 +322,8 @@ function ContextPie({ usage, onCompact, compactionLabel = '', compactionTitle = 
             class=${`compose-context-pie icon-btn${activeCompactionLabel ? ' is-compacting' : ''}`}
             type="button"
             title=${title}
-            aria-label=${activeCompactionLabel ? `Smart compaction ${activeCompactionLabel}` : 'Compact context'}
+            data-tooltip=${title}
+            aria-label=${title}
             onClick=${(e) => {
                 e.preventDefault();
                 e.stopPropagation();
