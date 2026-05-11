@@ -110,6 +110,7 @@ const envConfig = readEnvFile([
   "PICLAW_REMOTE_SHORT_CIRCUIT_ENABLED",
   "PICLAW_REMOTE_INTEROP_DECISION_MODEL",
   "PICLAW_WEB_EXTERNAL_URL",
+  "PICLAW_SCOPED_MODELS_ONLY",
   "PICLAW_LOG_LEVEL",
   "LOG_LEVEL",
 ]);
@@ -200,6 +201,10 @@ const webConfig =
 const toolsConfig =
   piclawConfig.tools && typeof piclawConfig.tools === "object"
     ? (piclawConfig.tools as Record<string, unknown>)
+    : piclawConfig;
+const modelsConfig =
+  piclawConfig.models && typeof piclawConfig.models === "object"
+    ? (piclawConfig.models as Record<string, unknown>)
     : piclawConfig;
 const whatsappConfig =
   piclawConfig.whatsapp && typeof piclawConfig.whatsapp === "object"
@@ -947,6 +952,11 @@ const configSearchMatchMode = pickString(toolsConfig, [
   "search_match_mode",
   "PICLAW_SEARCH_MATCH_MODE",
 ]);
+const configScopedModelsOnly = pickBoolean(modelsConfig, [
+  "scopedModelsOnly",
+  "scoped_models_only",
+  "PICLAW_SCOPED_MODELS_ONLY",
+]);
 
 /** Typed session-file safeguards grouped for runtime/session wiring. */
 export interface SessionStorageConfig {
@@ -1512,6 +1522,45 @@ export function setSearchMatchMode(mode: SearchMatchMode): SearchMatchMode {
   process.env.PICLAW_SEARCH_MATCH_MODE = nextMode;
   SEARCH_MATCH_MODE = nextMode;
   return SEARCH_MATCH_MODE;
+}
+
+// ---------------------------------------------------------------------------
+// Model scoping – optionally apply Pi enabledModels outside the TUI.
+// ---------------------------------------------------------------------------
+
+let SCOPED_MODELS_ONLY = Boolean(
+  pickBoolean({ PICLAW_SCOPED_MODELS_ONLY: process.env.PICLAW_SCOPED_MODELS_ONLY ?? envConfig.PICLAW_SCOPED_MODELS_ONLY }, [
+    "PICLAW_SCOPED_MODELS_ONLY",
+  ]) ?? configScopedModelsOnly ?? false,
+);
+
+/** Return true when Piclaw should filter non-TUI model lists by Pi enabledModels. */
+export function getScopedModelsOnly(): boolean {
+  const envOverride = pickBoolean({ PICLAW_SCOPED_MODELS_ONLY: process.env.PICLAW_SCOPED_MODELS_ONLY }, [
+    "PICLAW_SCOPED_MODELS_ONLY",
+  ]);
+  return envOverride ?? SCOPED_MODELS_ONLY;
+}
+
+/** Persist and apply global model scoping for Piclaw list/model-picker surfaces. */
+export function setScopedModelsOnly(enabled: boolean): boolean {
+  const next = Boolean(enabled);
+  const config = readJsonConfig(getConfigPath());
+  const models =
+    config.models && typeof config.models === "object"
+      ? { ...(config.models as Record<string, unknown>) }
+      : {};
+  const clearKeys = ["scopedModelsOnly", "scoped_models_only", "PICLAW_SCOPED_MODELS_ONLY"];
+  for (const key of clearKeys) {
+    delete models[key];
+  }
+  models.scopedModelsOnly = next;
+  config.models = models;
+  writeJsonConfig(getConfigPath(), config);
+
+  process.env.PICLAW_SCOPED_MODELS_ONLY = next ? "1" : "0";
+  SCOPED_MODELS_ONLY = next;
+  return SCOPED_MODELS_ONLY;
 }
 
 // ---------------------------------------------------------------------------
