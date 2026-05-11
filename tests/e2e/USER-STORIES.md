@@ -330,6 +330,10 @@
 | US-21 Swipe independence | ★★★ | ★★★ | ★ | Every session switch (touch) | High |
 | US-22 Settings layering | ★★★ | ★★ | ★★★ | Every settings open | Medium |
 | US-23 Context meter tooltip | ★★★ | ★★ | ★★★ | Every hover on pie | Low |
+| US-24 Hamburger menu items | ★★★ | ★★★ | ★★ | Every menu open | Medium |
+| US-25 Safe area / layout | ★★★ | ★★★ | ★★ | Always (PWA) | Medium |
+| US-26 PWA scale / preview | ★★ | ★★★ | ★ | Occasional | Low |
+| US-27 Context scoping | ★★★ | ★★ | ★★★ | Every session switch | High |
 | US-23 Mobile PWA viewport/theme | ★★★ | ★★★ | ☆ | Every mobile webapp session | Very high |
 
 ## Test implementation priority
@@ -357,4 +361,8 @@
 21. **US-21** — Session swipe independence from visible elements
 22. **US-22** — Settings dialog layering above workspace
 23. **US-23** — Context meter tooltip with token values
+24. **US-24** — Hamburger menu items and workspace state
+25. **US-25** — Safe area and layout fixes
+26. **US-26** — PWA display scale and editor preview
+27. **US-27** — Context scoping and compaction
 23. **US-23** — Mobile PWA viewport and themed safe-area coverage
