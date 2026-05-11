@@ -20,6 +20,10 @@ test("list items remain always decorated", () => {
   expect(isAlwaysDecoratedNode("ListItem")).toBe(true);
 });
 
+test("inline code remains decorated so monospaced spans render on the active line", () => {
+  expect(isAlwaysDecoratedNode("InlineCode")).toBe(true);
+});
+
 test("regular blockquotes stay decorated while editing inside them", () => {
   expect(shouldDecorateBlockquote("> quoted bullet list", true)).toBe(true);
 });
