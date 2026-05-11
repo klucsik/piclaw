@@ -140,6 +140,9 @@ export function TimelineMenu({
                 ${onToggleTerminal && !chatOnlyMode && workspaceOpen && html`<button class="workspace-menu-item" role="menuitem" onClick=${() => run(onToggleTerminal)}>${terminalVisible ? 'Hide terminal dock' : 'Show terminal dock'}</button>`}
 
                 <div class="workspace-menu-separator"></div>
+                <button class="workspace-menu-item" role="menuitem" disabled=${chatOnlyMode} onClick=${() => run(() => window.dispatchEvent(new CustomEvent('piclaw:workspace-action', { detail: { action: 'new-file' } })))}>New file</button>
+                <button class="workspace-menu-item" role="menuitem" disabled=${chatOnlyMode} onClick=${() => run(() => window.dispatchEvent(new CustomEvent('piclaw:workspace-action', { detail: { action: 'refresh' } })))}>Refresh tree</button>
+                <button class="workspace-menu-item" role="menuitem" disabled=${chatOnlyMode} onClick=${() => run(() => window.dispatchEvent(new CustomEvent('piclaw:workspace-action', { detail: { action: 'reindex' } })))}>Reindex workspace</button>
                 <button class=${`workspace-menu-item${showHidden ? ' active' : ''}`} role="menuitem" onClick=${() => run(() => {
                     const next = !showHidden;
                     setShowHidden(next);

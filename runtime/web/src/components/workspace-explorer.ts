@@ -866,8 +866,18 @@ export function WorkspaceExplorer({
             lastSigRef.current = '';
             loadTreeFnRef.current?.();
         };
+        const onWorkspaceAction = (e: any) => {
+            const action = e?.detail?.action;
+            if (action === 'new-file') handleMenuCreateFile();
+            else if (action === 'refresh') handleMenuRefresh();
+            else if (action === 'reindex') handleWorkspaceReindex();
+        };
         window.addEventListener('piclaw:toggle-hidden-files', onToggleHidden);
-        return () => window.removeEventListener('piclaw:toggle-hidden-files', onToggleHidden);
+        window.addEventListener('piclaw:workspace-action', onWorkspaceAction);
+        return () => {
+            window.removeEventListener('piclaw:toggle-hidden-files', onToggleHidden);
+            window.removeEventListener('piclaw:workspace-action', onWorkspaceAction);
+        };
     }, []);
     useEffect(() => { dragActiveRef.current = dragActive; }, [dragActive]);
     useEffect(() => { dragModeRef.current = dragMode; }, [dragMode]);
