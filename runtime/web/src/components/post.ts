@@ -10,7 +10,16 @@ import { buildAdaptiveCardSubmissionFallbackText, describeAdaptiveCardSubmission
 import { buildGeneratedWidgetPayload, canRenderGeneratedWidget } from '../ui/generated-widget.js';
 import { disclosureTriangleSvgString, renderDisclosureTriangle } from '../ui/disclosure-triangle.js';
 import { ImageModal } from './image-modal.js';
+import { ImageAnnotator, canAnnotate } from './image-annotator.js';
 import { FilePill } from './file-pill.js';
+import {
+    addHighlight,
+    applyHighlightsToElement,
+    DEFAULT_HIGHLIGHT_COLOR,
+    getHighlightsForPost,
+    getSelectionInElement,
+    HIGHLIGHT_COLORS,
+} from './post-highlights.js';
 import { buildSpeakablePostText, getSpeechPlaybackState, isSpeechSynthesisSupported, speakPostText, stopSpeechPlayback, subscribeSpeechPlayback } from './post-speech.ts';
 import { copyPlainTextSelectionFromElement, readSessionStorageFlagBestEffort, resolveLinkPreviewSiteName, writeClipboardDataViaExecCommand, writeClipboardTextBestEffort, writeSessionStorageFlagBestEffort } from './post-runtime-safety.js';
 
@@ -921,8 +930,11 @@ function highlightHtml(html, query) {
  */
 export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMessage, agentName, agentAvatarUrl, userName, userAvatarUrl, userAvatarBackground, onDelete, isThreadReply, isThreadPrev, isThreadNext, isRemoving, highlightQuery, onFileRef, onOpenWidget, onOpenAttachmentPreview }) {
     const [zoomedImage, setZoomedImage] = useState(null);
+    const [annotatingImage, setAnnotatingImage] = useState(null);
     const [copyState, setCopyState] = useState('idle');
     const [speechPlaybackState, setSpeechPlaybackState] = useState(() => getSpeechPlaybackState());
+    const [highlightPopup, setHighlightPopup] = useState(null);
+    const [highlightVersion, setHighlightVersion] = useState(0);
     const contentRef = useRef(null);
     const copyResetTimerRef = useRef(null);
 
@@ -1017,12 +1029,37 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
 
     const handleImageClick = (e, mediaId) => {
         e.stopPropagation();
-        setZoomedImage(getMediaUrl(mediaId));
+        if (canAnnotate()) {
+            setAnnotatingImage(getMediaUrl(mediaId));
+        } else {
+            setZoomedImage(getMediaUrl(mediaId));
+        }
     };
 
     const handleAttachmentPreview = (attachment) => {
         onOpenAttachmentPreview?.(attachment);
     };
+
+    const handleHighlightSelection = useCallback((color) => {
+        if (!highlightPopup) return;
+        addHighlight(post.id, {
+            text: highlightPopup.text,
+            textOffset: highlightPopup.textOffset,
+            color,
+        });
+        window.getSelection()?.removeAllRanges();
+        setHighlightPopup(null);
+        setHighlightVersion((v) => v + 1);
+    }, [highlightPopup, post.id]);
+
+    const handleAnnotationSave = useCallback((result) => {
+        setAnnotatingImage(null);
+        // Compose the annotated image into the chat as a file reference
+        if (result?.id) {
+            const event = new CustomEvent('piclaw:compose-media', { detail: { mediaId: result.id } });
+            window.dispatchEvent(event);
+        }
+    }, []);
 
     const handleDeleteClick = (e) => {
         e.stopPropagation();
@@ -1166,6 +1203,29 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
         if (!contentRef.current) return undefined;
         renderMermaidDiagrams(contentRef.current);
         return enhanceCodeBlocks(contentRef.current);
+    }, [renderedHtml]);
+
+    // Re-apply saved text highlights after content renders
+    useEffect(() => {
+        if (!contentRef.current) return;
+        const highlights = getHighlightsForPost(post.id);
+        if (highlights.length > 0) applyHighlightsToElement(contentRef.current, highlights);
+    }, [renderedHtml, highlightVersion]);
+
+    // Listen for text selection to show highlight popup
+    useEffect(() => {
+        const el = contentRef.current;
+        if (!el) return;
+        const onSelectionChange = () => {
+            const info = getSelectionInElement(el);
+            if (info && info.text.length > 0) {
+                setHighlightPopup(info);
+            } else {
+                setHighlightPopup(null);
+            }
+        };
+        document.addEventListener('selectionchange', onSelectionChange);
+        return () => document.removeEventListener('selectionchange', onSelectionChange);
     }, [renderedHtml]);
 
     useEffect(() => {
@@ -1530,6 +1590,31 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
             </div>
         </div>
         ${zoomedImage && html`<${ImageModal} src=${zoomedImage} onClose=${() => setZoomedImage(null)} />`}
+        ${annotatingImage && html`
+            <div class="post-inline-annotator">
+                <${ImageAnnotator}
+                    src=${annotatingImage}
+                    onSave=${handleAnnotationSave}
+                    onCancel=${() => setAnnotatingImage(null)}
+                />
+            </div>
+        `}
+        ${highlightPopup && html`
+            <div
+                class="post-highlight-popup"
+                style="position:fixed; left:${Math.max(8, highlightPopup.rect.left)}px; top:${highlightPopup.rect.top - 42}px; z-index:100"
+            >
+                ${HIGHLIGHT_COLORS.map((c) => html`
+                    <button
+                        key=${c.name}
+                        class="post-highlight-color-btn"
+                        style="background:${c.value}; border:1px solid rgba(128,128,128,0.3)"
+                        onClick=${(e) => { e.stopPropagation(); handleHighlightSelection(c.value); }}
+                        title=${`Highlight ${c.name}`}
+                    />
+                `)}
+            </div>
+        `}
 
     `;
 }
