@@ -83,19 +83,19 @@ Per-tool overrides should remain optional and only be applied when a specific to
 
 ## Write-mode migration decision (follow-up confirmation)
 
-Recommendation:
+Recommendation status (executed)
 
-- Do **not** run global write-mode blindly.
-- Run batched write-mode migrations in this order:
-  1. `web_default-14` ✅ executed
-  2. `web_default` ✅ executed
-  3. high-debt branch chats from the existing impact report
+- Started with staged write-mode migrations on selected chats.
+- Continued to `web_default_branch_4165db5c5a0f`.
+- Ran a full global write-mode migration on explicit user instruction.
 
-Executed staged write-mode migrations:
+Executed write-mode migrations:
 
 ```bash
 bun ./scripts/migrate-legacy-inline-tool-results.ts --write --chat web_default-14
 bun ./scripts/migrate-legacy-inline-tool-results.ts --write --chat web_default
+bun ./scripts/migrate-legacy-inline-tool-results.ts --write --chat web_default_branch_4165db5c5a0f
+bun ./scripts/migrate-legacy-inline-tool-results.ts --write
 ```
 
 Observed results:
@@ -110,25 +110,25 @@ Observed results:
   - Estimated bytes before: 13.6 MB
   - Estimated bytes after: 1.2 MB
   - Estimated reduction: 12.5 MB (91.5%)
+- `web_default_branch_4165db5c5a0f`
+  - Candidate entries rewritten: 334
+  - Estimated bytes before: 3.6 MB
+  - Estimated bytes after: 203.8 KB
+  - Estimated reduction: 3.4 MB (94.4%)
+- global final pass
+  - Candidate entries rewritten: 6,853
+  - Estimated bytes before: 64.5 MB
+  - Estimated bytes after: 4.1 MB
+  - Estimated reduction: 60.3 MB (93.6%)
 
-Post-write validation dry-runs:
-
-```bash
-bun ./scripts/migrate-legacy-inline-tool-results.ts --dry-run --chat web_default-14
-bun ./scripts/migrate-legacy-inline-tool-results.ts --dry-run --chat web_default
-```
-
-- Remaining candidates: 0 (both chats)
-
-Updated global remaining debt after staged writes:
+Post-write validation:
 
 ```bash
 bun ./scripts/migrate-legacy-inline-tool-results.ts --dry-run
 ```
 
-- Remaining candidates: 7,187
-- Estimated bytes before: 68.0 MB
-- Estimated bytes after: 3.9 MB
-- Estimated reduction potential: 64.1 MB (94.2%)
+- Remaining candidates: 0
+- Remaining estimated bytes before/after: 0 B / 0 B
+- Note: 27 parse errors remain in scanned files (non-JSON parseable lines), but no eligible candidates remain.
 
-Next step: continue staged write-mode on high-debt branch chats (non-global batch).
+Next step: monitor live context usage and keep migration script for future one-off cleanup.
