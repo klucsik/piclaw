@@ -16,8 +16,8 @@ import { createHash } from "crypto";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
-const INDEX = resolve(import.meta.dir, "../web/static/index.html");
-const DIST = resolve(import.meta.dir, "../web/static/dist");
+const INDEX = resolve(import.meta.dir, "../web/static/classic/index.html");
+const DIST = resolve(import.meta.dir, "../web/static/classic/dist");
 
 // Build a content hash from the main bundle files so the stamp is
 // deterministic and tied to actual content, not wall-clock time.

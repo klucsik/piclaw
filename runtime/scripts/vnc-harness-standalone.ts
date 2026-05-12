@@ -84,7 +84,7 @@ function getPaths() {
     return {
         scriptDir,
         harnessEntry: resolve(scriptDir, '../web/src/vnc-harness.ts'),
-        decoderWasm: resolve(scriptDir, '../web/static/js/vendor/remote-display-decoder.wasm'),
+        decoderWasm: resolve(scriptDir, '../web/static/common/js/vendor/remote-display-decoder.wasm'),
     };
 }
 

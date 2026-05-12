@@ -2,8 +2,8 @@
   "id": "js-yaml",
   "packageName": "js-yaml",
   "sourceEntry": "web/src/vendor/js-yaml-entry.ts",
-  "outputFile": "web/static/js/vendor/js-yaml.min.js",
-  "metadataFile": "web/static/js/vendor/js-yaml.meta.json",
+  "outputFile": "web/static/common/js/vendor/js-yaml.min.js",
+  "metadataFile": "web/static/common/js/vendor/js-yaml.meta.json",
   "buildCommand": [
     "bun",
     "build",

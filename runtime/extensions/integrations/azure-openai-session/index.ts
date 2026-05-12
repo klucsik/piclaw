@@ -30,8 +30,9 @@ export function setAzureOpenAiSessionModuleLoadersForTests(loaders?: {
 
 export default function register(pi: ExtensionAPI) {
   pi.on("context", async (event, ctx) => {
+    const currentModel = (ctx as { model?: any }).model;
     const mod = await loadProviderModuleImpl();
-    return await mod.repairAzureContext(event as { messages: any[] }, ctx as { model?: any });
+    return await mod.repairAzureContext(event as { messages: any[] }, { model: currentModel });
   });
 
   pi.registerCommand("image", {

@@ -203,13 +203,13 @@ test('parseQueuedContent normalizes backtick-wrapped file refs from Files blocks
     '  ',
     '  Files:',
     '  - `piclaw/runtime/extensions/viewers/editor/markdown/code-block.ts`',
-    '  - `piclaw/runtime/web/static/dist/editor.bundle.js`',
+    '  - `piclaw/runtime/web/static/classic/dist/editor.bundle.js`',
   ].join('\n'));
 
   expect(parsed.text).toBe('Fixed it.');
   expect(parsed.fileRefs).toEqual([
     'piclaw/runtime/extensions/viewers/editor/markdown/code-block.ts',
-    'piclaw/runtime/web/static/dist/editor.bundle.js',
+    'piclaw/runtime/web/static/classic/dist/editor.bundle.js',
   ]);
 });
 
@@ -406,7 +406,7 @@ test('resolveComposeModelPickerState keeps the model picker visible for cold cha
 });
 
 test('resolveComposeExtensionWorkingDisplay renders default working state with a spinner and preserves custom/hidden indicators', () => {
-  const css = readFileSync(join(import.meta.dir, '../../web/static/css/chat.css'), 'utf8');
+  const css = readFileSync(join(import.meta.dir, '../../web/static/classic/css/chat.css'), 'utf8');
   expect(css).toContain('.compose-inline-status-spinner');
   expect(css).toContain('animation: spin 1s linear infinite;');
 

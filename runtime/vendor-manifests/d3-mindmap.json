@@ -2,8 +2,8 @@
   "id": "d3-mindmap",
   "packageName": "d3",
   "sourceEntry": "web/src/vendor/d3-mindmap-entry.ts",
-  "outputFile": "web/static/js/vendor/d3-mindmap.min.js",
-  "metadataFile": "web/static/js/vendor/d3-mindmap.meta.json",
+  "outputFile": "web/static/common/js/vendor/d3-mindmap.min.js",
+  "metadataFile": "web/static/common/js/vendor/d3-mindmap.meta.json",
   "buildCommand": [
     "bun",
     "build",

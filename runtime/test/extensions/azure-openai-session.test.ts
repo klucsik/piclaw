@@ -51,6 +51,63 @@ describe("azure-openai session shim", () => {
     expect(handlers.some((entry) => entry.event === "session_shutdown")).toBe(false);
   });
 
+  test("captures context model before lazy provider import", async () => {
+    const handlers: Array<{ event: string; handler: (...args: any[]) => any }> = [];
+    let stale = false;
+    let observedModel: unknown = null;
+
+    setAzureOpenAiSessionModuleLoadersForTests({
+      provider: async () => {
+        stale = true;
+        return {
+          repairAzureContext: async (_event: unknown, ctx: { model?: unknown }) => {
+            observedModel = ctx.model;
+            return undefined;
+          },
+        } as any;
+      },
+    });
+
+    const api: ExtensionAPI = {
+      on(event: string, handler: (...args: any[]) => any) { handlers.push({ event, handler }); },
+      registerTool() {},
+      registerCommand() {},
+      registerShortcut() {},
+      registerFlag() {},
+      getFlag() { return undefined; },
+      registerMessageRenderer() {},
+      sendMessage() {},
+      sendUserMessage() {},
+      appendEntry() {},
+      setSessionName() {},
+      getSessionName() { return undefined; },
+      setLabel() {},
+      exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      getActiveTools: () => [],
+      getAllTools: () => [],
+      setActiveTools() {},
+      getCommands: () => [],
+      setModel: async () => true,
+      getThinkingLevel: () => "off" as any,
+      setThinkingLevel() {},
+      registerProvider() {},
+      unregisterProvider() {},
+    } as unknown as ExtensionAPI;
+
+    const model = { id: "azure-test" };
+    const ctx = {
+      get model() {
+        if (stale) throw new Error("stale ctx access");
+        return model;
+      },
+    };
+
+    azureOpenAiSessionExtension(api);
+    await handlers.find((entry) => entry.event === "context")?.handler({ messages: [] }, ctx);
+
+    expect(observedModel).toBe(model);
+  });
+
   test("keeps provider and image modules lazy until the matching hook runs", async () => {
     const handlers: Array<{ event: string; handler: (...args: any[]) => any }> = [];
     const commands = new Map<string, CommandDef>();
