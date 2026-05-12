@@ -8,6 +8,7 @@ import { importFresh, withTempWorkspaceEnv } from "../helpers.js";
 function compactionEnv(vars: Record<string, string> = {}): Record<string, string> {
   return {
     PICLAW_TOOL_RESULT_COMPACTION_ENABLED: "1",
+    PICLAW_TOOL_RESULT_COMPACTION_TOOLS: "bash,powershell,exec_batch",
     ...vars,
   };
 }
