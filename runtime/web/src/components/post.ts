@@ -931,6 +931,7 @@ function highlightHtml(html, query) {
 export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMessage, agentName, agentAvatarUrl, userName, userAvatarUrl, userAvatarBackground, onDelete, isThreadReply, isThreadPrev, isThreadNext, isRemoving, highlightQuery, onFileRef, onOpenWidget, onOpenAttachmentPreview }) {
     const [zoomedImage, setZoomedImage] = useState(null);
     const [annotatingImage, setAnnotatingImage] = useState(null);
+    const [annotationResult, setAnnotationResult] = useState(null); // { id, url } after Done
     const [copyState, setCopyState] = useState('idle');
     const [speechPlaybackState, setSpeechPlaybackState] = useState(() => getSpeechPlaybackState());
     const [highlightPopup, setHighlightPopup] = useState(null);
@@ -1062,11 +1063,24 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
 
     const handleAnnotationSave = useCallback((result) => {
         setAnnotatingImage(null);
-        // Compose the annotated image into the chat as a file reference
         if (result?.id) {
-            const event = new CustomEvent('piclaw:compose-media', { detail: { mediaId: result.id } });
-            window.dispatchEvent(event);
+            setAnnotationResult({ id: result.id, url: getMediaUrl(result.id) });
         }
+    }, []);
+
+    const handleAnnotationSend = useCallback(async () => {
+        if (!annotationResult?.id) return;
+        try {
+            const { sendAgentMessage } = await import('../api.js');
+            await sendAgentMessage('default', '', null, [annotationResult.id], null, post.chat_jid);
+        } catch (err) {
+            console.warn('[post] Failed to send annotated image:', err);
+        }
+        setAnnotationResult(null);
+    }, [annotationResult, post.chat_jid]);
+
+    const handleAnnotationDiscard = useCallback(() => {
+        setAnnotationResult(null);
     }, []);
 
     const handleDeleteClick = (e) => {
@@ -1605,6 +1619,18 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
                     onSave=${handleAnnotationSave}
                     onCancel=${() => setAnnotatingImage(null)}
                 />
+            </div>
+        `}
+        ${annotationResult && html`
+            <div class="post-annotation-result">
+                <img src=${annotationResult.url} alt="Annotated" class="post-annotation-preview" />
+                <div class="post-annotation-actions">
+                    <button class="post-annotation-send-btn" onClick=${handleAnnotationSend}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        Send to timeline
+                    </button>
+                    <button class="post-annotation-discard-btn" onClick=${handleAnnotationDiscard}>Discard</button>
+                </div>
             </div>
         `}
         ${highlightPopup && html`
