@@ -31,8 +31,6 @@ const STORED_OUTPUT_CACHE_MAX = 512;
 
 type StoredOutputCacheEntry = {
   saved: ReturnType<typeof saveToolOutput>;
-  summary: string;
-  semantic: boolean;
 };
 
 const storedOutputByDigest = new Map<string, StoredOutputCacheEntry>();
@@ -324,10 +322,9 @@ function saveAndRememberStoredOutput(
   fullOutput: string,
   source: string,
   summary: string,
-  semantic: boolean,
 ): StoredOutputCacheEntry {
   const saved = saveToolOutput(fullOutput, { source, summary });
-  const entry: StoredOutputCacheEntry = { saved, summary, semantic };
+  const entry: StoredOutputCacheEntry = { saved };
   rememberStoredOutput(digest, entry);
   return entry;
 }
@@ -350,12 +347,6 @@ async function compactTextOutput(
 
   const digest = computeOutputDigest(fullOutput, options.source);
   const cachedEntry = getCachedStoredOutput(digest);
-  if (cachedEntry) {
-    return {
-      summaryText: buildStoredOutputSummary(cachedEntry.saved, cachedEntry.summary, { semantic: cachedEntry.semantic }),
-      saved: cachedEntry.saved,
-    };
-  }
 
   const preview = buildPreview(fullOutput, PREVIEW_LINES, PREVIEW_LINE_CHARS);
   const semanticSummary = await summarizeToolOutputSemantically({
@@ -366,17 +357,13 @@ async function compactTextOutput(
     sizeBytes: Buffer.byteLength(fullOutput, "utf8"),
   }, options.extensionContext);
 
-  const summaryForStorage = semanticSummary || preview;
-  const cacheEntry = saveAndRememberStoredOutput(
-    digest,
-    fullOutput,
-    options.source,
-    summaryForStorage,
-    Boolean(semanticSummary),
-  );
+  const summaryForDisplay = semanticSummary || preview;
+  const saved = cachedEntry?.saved
+    ?? saveAndRememberStoredOutput(digest, fullOutput, options.source, summaryForDisplay).saved;
+
   return {
-    summaryText: buildStoredOutputSummary(cacheEntry.saved, cacheEntry.summary, { semantic: cacheEntry.semantic }),
-    saved: cacheEntry.saved,
+    summaryText: buildStoredOutputSummary(saved, summaryForDisplay, { semantic: Boolean(semanticSummary) }),
+    saved,
   };
 }
 

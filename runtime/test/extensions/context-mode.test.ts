@@ -136,6 +136,57 @@ describe("context-mode integration", () => {
     });
   });
 
+  test("retries semantic summary for cached outputs after an earlier failure", async () => {
+    await withTempWorkspaceEnv("piclaw-context-mode-", compactionEnv({
+      PICLAW_TOOL_OUTPUT_STORE_BYTES: "8",
+      PICLAW_TOOL_OUTPUT_STORE_LINES: "2",
+      PICLAW_TOOL_RESULT_SEMANTIC_SUMMARY_ENABLED: "1",
+    }), async () => {
+      const db = await importFresh<typeof import("../src/db.js")>("../src/db.js");
+      db.initDatabase();
+
+      const contextMode = await importFresh<any>("../extensions/integrations/context-mode.ts");
+      let attempts = 0;
+      contextMode.__setSemanticToolResultSummarizerForTests(async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("semantic fail once");
+        return "Summary:\n- semantic retry succeeded\n\nKey facts:\n- retries: 2\n\nWarnings/Errors:\n- none\n\nFollow-up cues:\n- inspect stored handle";
+      });
+
+      try {
+        const fake = createFakeExtensionApi({ allTools: [] });
+        contextMode.default(fake.api);
+
+        const toolResult = fake.handlers.find((entry) => entry.event === "tool_result")?.handler;
+        const first = await toolResult?.({
+          toolName: "bash",
+          content: [{ type: "text", text: "same\noutput\ncontent\n" }],
+          details: {},
+          input: { command: "printf same" },
+          isError: false,
+          toolCallId: "tool-sem-retry-1",
+          type: "tool_result",
+        });
+        expect(first?.content?.[0]?.text).toContain("Preview:");
+
+        const second = await toolResult?.({
+          toolName: "bash",
+          content: [{ type: "text", text: "same\noutput\ncontent\n" }],
+          details: {},
+          input: { command: "printf same" },
+          isError: false,
+          toolCallId: "tool-sem-retry-2",
+          type: "tool_result",
+        });
+        expect(second?.content?.[0]?.text).toContain("Semantic summary:");
+        expect(second?.content?.[0]?.text).toContain("semantic retry succeeded");
+        expect(attempts).toBe(2);
+      } finally {
+        contextMode.__setSemanticToolResultSummarizerForTests(null);
+      }
+    });
+  });
+
   test("does not compact large non-configured tool results", async () => {
     await withTempWorkspaceEnv("piclaw-context-mode-", compactionEnv({
       PICLAW_TOOL_OUTPUT_STORE_BYTES: "16",
