@@ -104,6 +104,10 @@ update-mermaid-vendor: ## Rebuild or upgrade vendored mermaid (use MERMAID_VERSI
 build-web: ## Build web JS/CSS bundles (+ sourcemaps) into static/classic/dist and static/common/dist
 	cd runtime && bun run build:web
 	@cd runtime && bun test --timeout $(WEB_BUILD_TEST_TIMEOUT_MS) test/channels/web/web-build.test.ts test/channels/web/post-link-preview-content.test.ts
+	@# Pre-compress static assets for faster first-request serving
+	@find runtime/web/static -type f \( -name '*.js' -o -name '*.css' -o -name '*.json' -o -name '*.svg' \) \
+		! -name '*.gz' ! -name '*.br' -size +1k \
+		-exec sh -c 'gzip -9 -k -f "$$1"' _ {} \;
 	@ls -lh \
 		runtime/web/static/classic/dist/app.bundle.js \
 		runtime/web/static/classic/dist/app.bundle.js.map \
