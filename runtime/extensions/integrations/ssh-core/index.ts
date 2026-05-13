@@ -2,6 +2,7 @@ export {
   applyLiveSshConfig,
   clearLiveSshConfig,
   createChatSshCoreExtension,
+  createSshAwareBashOperations,
   createSshCoreExtension,
   hasLiveChatSshSession,
   parseSshFlag,

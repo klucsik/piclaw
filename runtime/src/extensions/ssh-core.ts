@@ -745,6 +745,16 @@ function createRemoteBashOps(transport: RemoteTransport): BashOperations {
   };
 }
 
+export function createSshAwareBashOperations(chatJid: string, fallback: BashOperations): BashOperations {
+  return {
+    exec: async (command, cwd, options) => {
+      const state = getLiveChatSshState(chatJid);
+      if (!state?.transport) return fallback.exec(command, cwd, options);
+      return createRemoteBashOps(state.transport).exec(command, cwd, options);
+    },
+  };
+}
+
 function writeSecretFile(path: string, content: string): void {
   const normalized = content.endsWith("\n") ? content : `${content}\n`;
   writeFileSync(path, normalized, { mode: 0o600 });
