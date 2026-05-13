@@ -375,9 +375,11 @@ function parseMessageContentBlocks(raw: string | null | undefined): unknown[] | 
 
 function clipContent(row: MessageRow, limit?: number): MessageResultRow {
   const max = Number.isFinite(limit ?? NaN) ? Math.max(limit as number, 0) : undefined;
+  const parsedAnnotations = parseMessageContentBlocks(row.annotations);
   const base = {
     ...row,
     content_blocks: parseMessageContentBlocks(row.content_blocks),
+    annotations: parsedAnnotations?.length ? parsedAnnotations : undefined,
     created_at: row.timestamp,
   };
   if (max === undefined) return base;
