@@ -443,7 +443,7 @@ function listMessageWindow(
   }
 
   const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-  const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message
+  const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message
     FROM messages${whereClause} ORDER BY rowid DESC LIMIT ? OFFSET ?`;
   return db.prepare(sql).all(...params, limit, offset) as MessageRow[];
 }
@@ -544,7 +544,7 @@ function runSearch(
     params.push(...rowValues);
 
     const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-    const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message
+    const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message
       FROM messages${whereClause} ORDER BY rowid DESC LIMIT ? OFFSET ?`;
     return db.prepare(sql).all(...params, limit, offset) as MessageRow[];
   }
@@ -568,7 +568,7 @@ function runSearch(
     params.push(...timeValues);
     for (const c of rowClauses) conditions.push(c);
     params.push(...rowValues);
-    const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message
+    const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message
       FROM messages WHERE ${conditions.join(" AND ")} ORDER BY rowid DESC LIMIT ? OFFSET ?`;
     return db.prepare(sql).all(...params, limit, offset) as MessageRow[];
   }
@@ -594,7 +594,7 @@ function runSearch(
     params.push(...rowValues);
 
     const sql = `SELECT messages.rowid, messages.chat_jid, messages.sender,
-      messages.sender_name, messages.content, messages.content_blocks, messages.timestamp, messages.is_bot_message
+      messages.sender_name, messages.content, messages.content_blocks, messages.annotations, messages.timestamp, messages.is_bot_message
       FROM messages
       JOIN messages_fts ON messages_fts.rowid = messages.rowid
       WHERE ${conditions.join(" AND ")} ORDER BY messages.rowid DESC LIMIT ? OFFSET ?`;
@@ -623,7 +623,7 @@ function runSearch(
     for (const c of rowClauses) conditions.push(c);
     params.push(...rowValues);
 
-    const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message
+    const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message
       FROM messages WHERE ${conditions.join(" AND ")} ORDER BY rowid DESC LIMIT ? OFFSET ?`;
     return db.prepare(sql).all(...params, limit, offset) as MessageRow[];
   }
@@ -647,7 +647,7 @@ function fetchByRowId(
     params.push(roleFilter);
   }
   appendSenderFilter(conditions, params, senderFilter);
-  const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message
+  const sql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message
       FROM messages WHERE ${conditions.join(" AND ")} LIMIT 1`;
   return (db.prepare(sql).get(...params) as MessageRow | undefined) ?? null;
 }
@@ -669,7 +669,7 @@ function fetchContextRows(
     beforeParams.push(roleFilter);
   }
   appendSenderFilter(beforeConditions, beforeParams, senderFilter);
-  const beforeSql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message
+  const beforeSql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message
       FROM messages WHERE ${beforeConditions.join(" AND ")} ORDER BY rowid DESC LIMIT ?`;
 
   const afterConditions = ["chat_jid = ?", "rowid > ?"];
@@ -679,7 +679,7 @@ function fetchContextRows(
     afterParams.push(roleFilter);
   }
   appendSenderFilter(afterConditions, afterParams, senderFilter);
-  const afterSql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message
+  const afterSql = `SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message
       FROM messages WHERE ${afterConditions.join(" AND ")} ORDER BY rowid ASC LIMIT ?`;
 
   const beforeRows = before > 0 ? (db.prepare(beforeSql).all(...beforeParams, before) as MessageRow[]) : [];
@@ -692,7 +692,7 @@ function fetchContextRows(
 function fetchCascadeRows(chatJid: string, rowId: number): MessageRow[] {
   return getDb()
     .prepare(
-      "SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, timestamp, is_bot_message FROM messages WHERE chat_jid = ? AND (rowid = ? OR thread_id = ?)",
+      "SELECT rowid, chat_jid, sender, sender_name, content, content_blocks, annotations, timestamp, is_bot_message FROM messages WHERE chat_jid = ? AND (rowid = ? OR thread_id = ?)",
     )
     .all(chatJid, rowId, rowId) as MessageRow[];
 }
