@@ -86,33 +86,32 @@ test("runCompactionWithTimeout keeps the single-flight lock until timed-out comp
       isCompacting: true,
       abortCompaction: () => {
         aborts += 1;
+        // Simulate abort causing the compaction to settle shortly after
+        setTimeout(() => release.resolve(), 10);
       },
     };
     const options = { onWarn: () => undefined };
 
-    const first = await runCompactionWithTimeout(session, "web:timeout", options, async () => {
+    const first = await runCompactionWithTimeout(session, "web:timeout-settle", options, async () => {
       calls += 1;
       await release.promise;
       return "late";
     });
-    const second = await runCompactionWithTimeout(session, "web:timeout", options, async () => {
-      calls += 1;
-      return "second";
-    });
 
+    // First call timed out, but settlement grace waited for the compaction
+    // promise to settle — so the lock is already released by the time the
+    // caller gets the result.
     expect(first.ok).toBe(false);
-    expect(second).toEqual(first);
     expect(calls).toBe(1);
     expect(aborts).toBe(1);
 
-    release.resolve();
-    await sleep(0);
-
-    const third = await runCompactionWithTimeout(session, "web:timeout", options, async () => {
+    // Second call should now succeed independently (lock was released
+    // after settlement).
+    const second = await runCompactionWithTimeout(session, "web:timeout-settle", options, async () => {
       calls += 1;
-      return "third";
+      return "second";
     });
-    expect(third).toEqual({ ok: true, result: "third" });
+    expect(second).toEqual({ ok: true, result: "second" });
     expect(calls).toBe(2);
   } finally {
     if (previousTimeout === undefined) delete process.env.PICLAW_COMPACTION_TIMEOUT_MS;

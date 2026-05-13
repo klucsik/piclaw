@@ -327,6 +327,17 @@ async function runCompactionWithTimeoutExclusive<T>(
   }
 
   await abortCompactionBestEffort(session, chatJid, options);
+
+  // Wait for the compaction promise to fully settle so extension handlers
+  // finish their cleanup (finally blocks, UI teardown) before the caller
+  // can dispose the session.  Without this, emergency rotation can call
+  // session.dispose() while the extension's ctx is still in use.
+  const SETTLEMENT_GRACE_MS = 5_000;
+  await Promise.race([
+    compactionOutcome,
+    new Promise<void>((r) => setTimeout(r, SETTLEMENT_GRACE_MS)),
+  ]);
+
   updateSessionCompacting(chatJid, false);
   clearChatCompactionActive(chatJid);
   return {
