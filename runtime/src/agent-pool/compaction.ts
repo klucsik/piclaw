@@ -176,6 +176,12 @@ export function isCompactionCancellationError(message: string | null | undefined
   return /compaction cancelled|aborterror/i.test(String(message || ""));
 }
 
+function isRecentCompactionFailure(state: ChatCompactionBackoffState, nowMs = Date.now()): boolean {
+  const failedAtMs = Date.parse(state.lastFailedAt);
+  if (!Number.isFinite(failedAtMs)) return false;
+  return failedAtMs <= nowMs && (nowMs - failedAtMs) <= 24 * 60 * 60 * 1000;
+}
+
 function formatCompactionBackoffDetail(state: Pick<ChatCompactionBackoffState, "failureCount" | "backoffUntil" | "lastErrorMessage">): string {
   const parts = [
     `Skipping auto-compaction until ${state.backoffUntil}`,
@@ -384,7 +390,9 @@ async function maybeAutoCompactSession(
   try {
     const activeBackoff = getActiveCompactionBackoff(chatJid);
     const previousBackoff = getChatCompactionBackoff(chatJid);
-    const previousNonCancellationFailure = previousBackoff && !isCompactionCancellationError(previousBackoff.lastErrorMessage)
+    const previousNonCancellationFailure = previousBackoff
+      && !isCompactionCancellationError(previousBackoff.lastErrorMessage)
+      && isRecentCompactionFailure(previousBackoff)
       ? previousBackoff
       : null;
     if (activeBackoff && isCompactionCancellationError(activeBackoff.lastErrorMessage)) {

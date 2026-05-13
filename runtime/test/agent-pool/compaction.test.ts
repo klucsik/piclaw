@@ -131,8 +131,8 @@ test("maybeAutoCompactSessionBeforePrompt suppresses retry after an expired non-
     setChatCompactionBackoff(chatJid, {
       chatJid,
       failureCount: 1,
-      lastFailedAt: "2026-05-13T14:17:50.915Z",
-      backoffUntil: "2026-05-13T14:32:50.915Z",
+      lastFailedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+      backoffUntil: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
       lastErrorMessage: "Compaction timed out after 180s",
     });
     const session = {
