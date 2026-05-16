@@ -235,6 +235,17 @@ function buildMergePrompt(input: {
   return sections.join("\n");
 }
 
+function hasSafeCompactionOutputRoom(model: any, promptText: string, maxTokens: number): boolean {
+  try {
+    getSafeCompactionMaxTokens(model, promptText, maxTokens);
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/exceeds safe model budget/i.test(message)) return false;
+    throw err;
+  }
+}
+
 async function completeCompactionPrompt(
   model: any,
   auth: { apiKey?: string; headers?: Record<string, string> },
@@ -285,7 +296,20 @@ async function mergeProgressiveSummaries(input: {
   const MAX_PROGRESSIVE_MERGE_PASSES = 12;
   let summaries = input.summaries;
   let pass = 1;
-  while (summaries.join("\n\n").length > input.budget.mergeBudgetChars && summaries.length > 1) {
+  const buildFinalPrompt = () => buildMergePrompt({
+    summaries,
+    rangeLabel: "final",
+    final: true,
+    ...input.finalPromptExtras,
+  });
+
+  while (
+    summaries.length > 1
+    && (
+      summaries.join("\n\n").length > input.budget.mergeBudgetChars
+      || !hasSafeCompactionOutputRoom(input.model, buildFinalPrompt(), input.maxTokens)
+    )
+  ) {
     if (pass > MAX_PROGRESSIVE_MERGE_PASSES) {
       throw new Error(`Progressive compaction merge exceeded ${MAX_PROGRESSIVE_MERGE_PASSES} passes; refusing potential infinite merge loop`);
     }
@@ -356,12 +380,22 @@ async function mergeProgressiveSummaries(input: {
   }
 
   input.ctx.ui.setWorkingMessage?.("Smart compaction: final progressive merge…");
-  const finalPrompt = buildMergePrompt({
-    summaries,
-    rangeLabel: "final",
-    final: true,
-    ...input.finalPromptExtras,
-  });
+  let finalPrompt = buildFinalPrompt();
+  if (!hasSafeCompactionOutputRoom(input.model, finalPrompt, input.maxTokens) && summaries.length === 1) {
+    const compressPrompt = buildMergePrompt({ summaries, rangeLabel: "final-fit-compress", final: false });
+    if (hasSafeCompactionOutputRoom(input.model, compressPrompt, input.maxTokens)) {
+      input.ctx.ui.setWorkingMessage?.("Smart compaction: compressing final summary to fit context…");
+      input.publishEstimate?.(estimateCompactionPromptTokens(compressPrompt), "merge_final_compress");
+      summaries = [await completeCompactionPrompt(
+        input.model,
+        input.auth,
+        compressPrompt,
+        input.maxTokens,
+        input.abortSignal,
+      )];
+      finalPrompt = buildFinalPrompt();
+    }
+  }
   input.publishEstimate?.(estimateCompactionPromptTokens(finalPrompt), "merge_final");
   return await completeCompactionPrompt(
     input.model,

@@ -15,7 +15,7 @@ import { resolveModelRequestAuth } from "../utils/model-auth.js";
 import { createLogger } from "../utils/logger.js";
 import { applyTokenEstimateSafetyMultiplier } from "../utils/context-window-budget.js";
 
-import { MIN_SUMMARY_CHARS, PROGRESSIVE_FALLBACK_CONTEXT_WINDOW, SELECTIVE_THRESHOLD } from "./smart-compaction/config.js";
+import { MIN_COMPACTION_OUTPUT_TOKENS, MIN_SUMMARY_CHARS, PROGRESSIVE_FALLBACK_CONTEXT_WINDOW, SELECTIVE_THRESHOLD, SYSTEM_PROMPT_OVERHEAD_TOKENS } from "./smart-compaction/config.js";
 import { estimateCompactionPromptTokens, estimateTokensFromChars, getContextWindowEstimate, publishContextEstimate } from "./smart-compaction/context.js";
 import { compressFilePaths, fileListsFromOps } from "./smart-compaction/files.js";
 import { convertMessagesWithMetadata, type SourceMessage } from "./smart-compaction/messages.js";
@@ -260,6 +260,10 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
           )
         : "";
 
+      const contextWindow = targetContext.targetContextWindow ?? getContextWindowEstimate(ctx) ?? PROGRESSIVE_FALLBACK_CONTEXT_WINDOW;
+      const configuredKeepRecent = Math.max(0, Number(settings.keepRecentTokens) || 0);
+      const safeKeepRecent = clampKeepRecentTokens(configuredKeepRecent, contextWindow);
+
       // ── No-op detection ──────────────────────────────────────────────
       // Skip the LLM call entirely when we can produce a good summary
       // mechanically. This saves ~60-110s and 100-270k input tokens.
@@ -277,9 +281,6 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         ctx,
       );
       if (noOpResult) {
-        const contextWindow = targetContext.targetContextWindow ?? getContextWindowEstimate(ctx) ?? PROGRESSIVE_FALLBACK_CONTEXT_WINDOW;
-        const configuredKeepRecent = Math.max(0, Number(settings.keepRecentTokens) || 0);
-        const safeKeepRecent = clampKeepRecentTokens(configuredKeepRecent, contextWindow);
         const postFit = estimatePostCompactionFit(noOpResult.compaction.summary, configuredKeepRecent, contextWindow);
         if (!postFit.fits || configuredKeepRecent > safeKeepRecent) {
           try {
@@ -318,16 +319,18 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         }
       }
 
-      // Short conversations → built-in full-pass is fine
-      if (messagesToSummarize.length < SELECTIVE_THRESHOLD) {
+      // Short conversations can still overflow the provider's compaction prompt
+      // when they contain huge tool outputs or image/file payloads. Only fall
+      // through to the built-in full-pass compactor when the estimated full
+      // prompt has room for system overhead plus a minimal summary response;
+      // otherwise keep going into selective/progressive chunking.
+      const fullPassPromptEstimate = applyTokenEstimateSafetyMultiplier(tokensBefore) + SYSTEM_PROMPT_OVERHEAD_TOKENS;
+      if (messagesToSummarize.length < SELECTIVE_THRESHOLD && fullPassPromptEstimate + MIN_COMPACTION_OUTPUT_TOKENS <= contextWindow) {
         publishContextEstimate(ctx, tokensBefore, "builtin_fallback");
         return;
       }
 
       const compactionStartedAt = Date.now();
-      const contextWindow = targetContext.targetContextWindow ?? getContextWindowEstimate(ctx) ?? PROGRESSIVE_FALLBACK_CONTEXT_WINDOW;
-      const configuredKeepRecent = Math.max(0, Number(settings.keepRecentTokens) || 0);
-      const safeKeepRecent = clampKeepRecentTokens(configuredKeepRecent, contextWindow);
       if (safeKeepRecent < configuredKeepRecent) {
         log.debug(
           `keepRecentTokens setting ${configuredKeepRecent} exceeds safe ${safeKeepRecent} for ${contextWindow} context; post-compaction fit checks will use the configured kept-window estimate to avoid under-reporting`,
@@ -348,10 +351,11 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
         humanUserIndexes,
       );
 
+      const promptTokens = estimateCompactionPromptTokens(promptText);
       log.debug(
-        `Prompt: ${Math.round(promptText.length / 1000)}k chars (vs ~${Math.round(tokensBefore / 1000)}k tokens full)`,
+        `Prompt: ${Math.round(promptText.length / 1000)}k chars / ~${Math.round(promptTokens / 1000)}k tokens (vs ~${Math.round(tokensBefore / 1000)}k tokens full)`,
           );
-      publishContextEstimate(ctx, estimateCompactionPromptTokens(promptText), "summarizing_prompt");
+      publishContextEstimate(ctx, promptTokens, "summarizing_prompt");
 
       // Model — use the session's own model (already session-scoped)
       const model = ctx.model;
@@ -366,11 +370,12 @@ export const smartCompaction: ExtensionFactory = (pi: ExtensionAPI) => {
       }
 
       const budget = getProgressiveCompactionBudget(model, targetContext.targetContextWindow);
-      if (budget.forceProgressive || promptText.length > budget.promptBudgetChars) {
+      const promptTooLargeForSinglePass = promptTokens + MIN_COMPACTION_OUTPUT_TOKENS > budget.contextWindow;
+      if (budget.forceProgressive || promptText.length > budget.promptBudgetChars || promptTooLargeForSinglePass) {
         try {
           ctx.ui.setWorkingMessage("Smart compaction: progressive iterative mode…");
           log.debug(
-            `Progressive compaction enabled: prompt ${Math.round(promptText.length / 1000)}k chars exceeds ${Math.round(budget.promptBudgetChars / 1000)}k budget for ${budget.contextWindow.toLocaleString()} context`,
+            `Progressive compaction enabled: prompt ${Math.round(promptText.length / 1000)}k chars / ~${Math.round(promptTokens / 1000)}k tokens exceeds safe single-pass budget (${Math.round(budget.promptBudgetChars / 1000)}k chars, ${budget.contextWindow.toLocaleString()} context)`,
           );
           const progressiveSummary = await runProgressiveCompaction({
             llmMessages,

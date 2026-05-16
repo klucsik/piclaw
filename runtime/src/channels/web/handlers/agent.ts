@@ -721,6 +721,14 @@ export async function handleAgentMessage(
     }
   }
 
+  const isCompactionControlCommand = command?.type === "compact" || (command?.type === "model" && Boolean(command.compact));
+  if (isCompactionControlCommand && (isActive || hasQueuedBacklog) && (requestMode === "queue" || requestMode === "auto")) {
+    // session.compact() aborts the current agent operation before rewriting the
+    // branch. Queue explicit compaction requests behind the active turn/backlog
+    // so they operate on the complete current session instead of racing it.
+    return queueDeferredFollowup(content);
+  }
+
   if (command?.type === "steer" && isStreaming) {
     const steerText = (command.message || "").trim();
     if (steerText) {

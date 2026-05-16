@@ -687,6 +687,46 @@ describe("smart-compaction", () => {
       expect(ctx.ui.setWorkingMessage).toHaveBeenCalledWith(expect.stringContaining("Smart compaction:"));
     });
 
+    it("uses progressive chunks for short conversations whose full compaction prompt would exceed the provider limit", async () => {
+      const hugeShortConversation = Array.from({ length: 8 }, (_, i) =>
+        userMsg(`Oversized short-session fact ${i}: ${"x".repeat(140_000)}`),
+      );
+
+      (completeSimple as any).mockImplementation(async (_model: any, context: any) => {
+        const prompt = context.messages[0].content[0].text as string;
+        if (prompt.includes("deterministic chunk")) {
+          const range = prompt.match(/Message index range: ([0-9-]+)/)?.[1] ?? "unknown";
+          return {
+            content: [{ type: "text", text: `## Chunk Range\n- ${range}\n\n## Goals / User Intent\n- Preserve oversized short-session chunk ${range}\n\n## Constraints & Preferences\n- none\n\n## Decisions\n- none\n\n## Files / Commands / Tool Outcomes\n- none\n\n## Progress\n- Done: chunk summarized\n- In progress: final merge\n- Blocked: none\n\n## Open Questions / Next Steps\n- merge\n\n## Key Continuity Facts\n- Oversized short-session fact in ${range}` }],
+            stopReason: "end",
+          };
+        }
+        return {
+          content: [{ type: "text", text: "## Goal\nProgressive short-session final goal\n\n## Current Active Topic\n- oversized short-session compaction\n\n## Historical / Background Context\n- short sessions can still overflow provider prompt limits\n\n## Constraints & Preferences\n- preserve facts\n\n## Progress\n### Done\n- [x] chunks summarized\n\n### In Progress\n- [ ] final validation\n\n### Blocked\n- none\n\n## Key Decisions\n- **Progressive mode**: used despite low message count\n\n## Next Steps\n1. validate\n\n## Critical Context\n- Oversized short-session fact 0\n- Oversized short-session fact 7" }],
+          stopReason: "end",
+        };
+      });
+
+      const result = await handler!(
+        {
+          preparation: makePreparation(hugeShortConversation.length, {
+            messagesToSummarize: hugeShortConversation,
+            tokensBefore: 292_745,
+            settings: { enabled: true, reserveTokens: 8192, keepRecentTokens: 1000 },
+          }),
+          branchEntries: [],
+          signal: new AbortController().signal,
+        },
+        makeCtx({ model: { provider: "test", id: "provider-limit", contextWindow: 272_000, reasoning: false } }),
+      );
+
+      expect(result.compaction.summary).toContain("Progressive short-session final goal");
+      expect((completeSimple as any).mock.calls.length).toBeGreaterThan(1);
+      const prompts = (completeSimple as any).mock.calls.map((call: any[]) => call[1].messages[0].content[0].text as string);
+      expect(prompts.some((prompt: string) => prompt.includes("deterministic chunk"))).toBe(true);
+      expect(prompts.at(-1)).toContain("Ordered Intermediate Summaries");
+    });
+
     it("aborts progressive mode when merge passes make no reduction (loop guard)", async () => {
       const longMessages: any[] = [];
       for (let i = 0; i < 80; i++) {

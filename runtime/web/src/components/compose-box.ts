@@ -398,8 +398,8 @@ export function getModelPickerContextLimit(modelOption, contextUsage) {
     }
     return {
         blocked: true,
-        note: 'Current context won’t fit — compact first',
-        title: `Current context uses ${formatK(tokens)} tokens (~${formatK(safetyAdjustedTokens)} with estimator safety) plus app/tool overhead, but this model effectively fits about ${formatK(effectiveContextWindow)} (${formatK(contextWindow)} raw). Compact first.`,
+        note: 'Needs compaction to switch',
+        title: `Current context uses ${formatK(tokens)} tokens (~${formatK(safetyAdjustedTokens)} with estimator safety) plus app/tool overhead, but this model effectively fits about ${formatK(effectiveContextWindow)} (${formatK(contextWindow)} raw). Switch will compact first.`,
         tokens,
         safetyAdjustedTokens,
         contextWindow,
@@ -1856,10 +1856,9 @@ export function ComposeBox({
         const contextLimit = getModelPickerContextLimit(modelOption, contextUsage);
         if (contextLimit.blocked) {
             setSubmitError(null);
-            setSubmitNotice(contextLimit.note);
-            return;
+            setSubmitNotice(contextLimit.note || 'Compacting before switching model…');
         }
-        const ok = await runModelCommand(`/model ${modelLabel}`);
+        const ok = await runModelCommand(`/model ${modelLabel}${contextLimit.blocked ? ' --compact' : ''}`);
         if (ok) setShowModelPopup(false);
     };
 
@@ -2990,7 +2989,7 @@ export function ComposeBox({
                                             role="menuitem"
                                             class=${`compose-model-popup-item compose-model-popup-model-item${modelPopupIndex === index ? ' active' : ''}${activeModel === modelLabel ? ' current-model' : ''}${contextLimit.blocked ? ' context-blocked' : ''}`}
                                             onClick=${() => { void handleSelectModel(modelOption); }}
-                                            disabled=${switchingModel || contextLimit.blocked}
+                                            disabled=${switchingModel}
                                             title=${[modelLabel, modelDisplayName, contextWindowLabel, contextLimit.title].filter(Boolean).join(' • ')}
                                         >
                                             <span class="compose-model-popup-model-stack">
