@@ -4,7 +4,29 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'runtime/web/**'
+      - 'runtime/src/**'
+      - 'runtime/test/**'
+      - 'runtime/extensions/**'
+      - 'runtime/scripts/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'Makefile'
+      - 'tsconfig*.json'
+      - '.github/workflows/ci.yml'
   pull_request:
+    paths:
+      - 'runtime/web/**'
+      - 'runtime/src/**'
+      - 'runtime/test/**'
+      - 'runtime/extensions/**'
+      - 'runtime/scripts/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'Makefile'
+      - 'tsconfig*.json'
+      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
