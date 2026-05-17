@@ -2,6 +2,9 @@ import { useSignal, useComputed } from "@preact/signals";
 import { type SettingsData, type Toolset, type Tool, type SettingsSectionProps } from "./types";
 import { registerSettingsPane } from "./pane-registry";
 
+
+import { createLogger } from "../../utils/logger";
+const log = createLogger("settings/tools");
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -88,7 +91,7 @@ export function ToolsSection({
     try {
       await saveSetting("compaction", "toolResultCompactionTools", arr);
     } catch (e) {
-      console.warn("[settings/tools] Failed to save compaction tools", e);
+      log.warn(Failed to save compaction tools", e);
     }
   };
 
@@ -99,7 +102,7 @@ export function ToolsSection({
     try {
       await saveSetting("general", "searchMatchMode", next);
     } catch (e) {
-      console.warn("[settings/tools] Failed to save searchMatchMode", e);
+      log.warn(Failed to save searchMatchMode", e);
     }
   };
 

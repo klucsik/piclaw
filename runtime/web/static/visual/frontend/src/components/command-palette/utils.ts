@@ -1,5 +1,8 @@
 import { getMessageUrl } from "../../api/chat-jid";
 
+
+import { createLogger } from "../../utils/logger";
+const log = createLogger("CommandPalette");
 /**
  * Sends a slash command to the backend message endpoint.
  */
@@ -10,7 +13,7 @@ export function sendCommand(command: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content: command }),
   }).catch((err) => {
-    console.warn("[CommandPalette] send failed:", err);
+    log.warn(send failed:", err);
     window.dispatchEvent(
       new CustomEvent("piclaw:status-flash", {
         detail: { message: "Command failed", type: "error" },
@@ -35,7 +38,7 @@ export async function fetchAutocompleteOptions(
     if (mapLabel) return raw.map((item: Record<string, unknown>) => String(item[mapLabel] ?? "")).filter(Boolean);
     return raw;
   } catch (err) {
-    console.warn("[CommandPalette] Failed to fetch autocomplete options:", err);
+    log.warn(Failed to fetch autocomplete options:", err);
     return [];
   }
 }

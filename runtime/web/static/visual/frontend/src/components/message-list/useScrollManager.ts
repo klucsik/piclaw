@@ -5,6 +5,9 @@ import { renderMermaidDiagrams } from "../../utils/mermaid-render";
 import { normalizePost } from "./helpers";
 import type { Interaction } from "./types";
 
+
+import { createLogger } from "../../utils/logger";
+const log = createLogger("MessageList");
 /**
  * Manages scroll state and scroll-related behaviours:
  * - Creates and returns listRef (attach to the list container)
@@ -102,7 +105,7 @@ export function useScrollManager(
           }
         }
       } catch (err) {
-        console.warn("[MessageList] jump-to-message failed:", err);
+        log.warn(jump-to-message failed:", err);
         window.dispatchEvent(
           new CustomEvent("piclaw:status-flash", {
             detail: { message: "Failed to load message", type: "error" },
@@ -145,7 +148,7 @@ export function useScrollManager(
     const render = () => {
       if (container.querySelector(".mermaid-container[data-mermaid]")) {
         renderMermaidDiagrams(container).catch((err) => {
-          console.warn("[MessageList] mermaid render failed:", err);
+          log.warn(mermaid render failed:", err);
         });
       }
     };

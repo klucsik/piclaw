@@ -7,6 +7,9 @@ import { MessageList } from "../components/MessageList";
 import { safeGetItem, safeSetItem } from "../utils/storage";
 
 
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("ChatPanel");
 interface ChatPanelProps {
   onOpenPalette?: () => void;
 }
@@ -83,7 +86,7 @@ export function ChatPanel({ onOpenPalette }: ChatPanelProps = {}) {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({ content: text }),
-      }).catch(console.error);
+      }).catch((e) => log.error("unhandled", e));
     }
   };
   window.addEventListener("piclaw:widget-submission", widgetSubmissionHandler);

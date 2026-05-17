@@ -4,6 +4,9 @@ import { useDialog } from "../../hooks/useDialog";
 import { registerSettingsPane } from "./pane-registry";
 import { CustomSelect } from "../../components/CustomSelect";
 
+
+import { createLogger } from "../../utils/logger";
+const log = createLogger("keychain");
 interface KeychainEntry {
   name: string;
   type?: string;
@@ -69,7 +72,7 @@ export function KeychainSection() {
         body: JSON.stringify({ name: newName.value.trim(), secret: newSecret.value, type: newType.value }),
       });
       if (!res.ok) {
-        console.warn("[keychain] add failed:", res.status);
+        log.warn(add failed:", res.status);
         showKeychainError("Couldn't add entry. Please try again.");
         return;
       }
@@ -78,7 +81,7 @@ export function KeychainSection() {
       showAdd.value = false;
       fetchEntries();
     } catch (err) {
-      console.warn("[keychain] add failed:", err);
+      log.warn(add failed:", err);
       showKeychainError("Failed to add entry");
     }
   };
@@ -98,13 +101,13 @@ export function KeychainSection() {
         body: JSON.stringify({ name }),
       });
       if (!res.ok) {
-        console.warn("[keychain] delete failed:", res.status);
+        log.warn(delete failed:", res.status);
         showKeychainError("Couldn't delete entry. Please try again.");
         return;
       }
       fetchEntries();
     } catch (err) {
-      console.warn("[keychain] delete failed:", err);
+      log.warn(delete failed:", err);
       showKeychainError("Failed to delete entry");
     }
   };

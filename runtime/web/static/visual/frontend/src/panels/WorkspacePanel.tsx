@@ -8,6 +8,9 @@ import { WorkspaceActions } from "./workspace/WorkspaceActions";
 import { WorkspacePreview } from "./workspace/WorkspacePreview";
 import {
   readJsonSafely,
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("WorkspacePanel");
   toUserFacingMessage,
   getErrorMessage,
   type WorkspaceMutationPayload,
@@ -49,7 +52,7 @@ function FilePreview({ node, onMutate }: FilePreviewProps) {
       }
       onMutate({ nextNode: null });
     } catch (error) {
-      console.error("[WorkspacePanel] Failed to delete file:", error);
+      log.error(Failed to delete file:", error);
       await showAlert({
         title: "Failed to delete file",
         description: toUserFacingMessage(error, "Failed to delete file"),

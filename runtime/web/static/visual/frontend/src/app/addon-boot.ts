@@ -14,6 +14,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'preact/hooks'
 import { html as htmHtml } from 'htm/preact';
 import {
     registerSettingsPane,
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("addon-boot");
     unregisterSettingsPane,
     notifySettingsPanesChanged,
 } from '../panels/settings/pane-registry';
@@ -97,7 +100,7 @@ export async function loadAddonWebEntries(): Promise<void> {
                 await loadScript(href);
             }
         } catch (error) {
-            console.warn('[addon-boot] Failed to fetch addon web entries:', error);
+            log.warn(Failed to fetch addon web entries:', error);
         }
     })();
 
@@ -111,7 +114,7 @@ function loadScript(src: string): Promise<void> {
         script.src = src;
         script.onload = () => resolve();
         script.onerror = (err) => {
-            console.warn('[addon-boot] Failed to load addon web bundle:', src, err);
+            log.warn(Failed to load addon web bundle:', src, err);
             resolve(); // Don't reject — skip broken addons
         };
         document.head.appendChild(script);

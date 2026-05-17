@@ -2,6 +2,9 @@ import { useEffect } from "preact/hooks";
 import { useSignal, useComputed } from "@preact/signals";
 import { formatBytesCompact } from "../utils/format";
 
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("SystemStats");
 interface StatsData {
   cpu_percent: number;
   ram_percent: number;
@@ -125,7 +128,7 @@ export function SystemStats() {
           statsPollTick.value += 1;
         }
       } catch (err) {
-        console.warn("[SystemStats] fetch failed:", err);
+        log.warn(fetch failed:", err);
         statsError.value = true;
         statsPollTick.value += 1;
       }

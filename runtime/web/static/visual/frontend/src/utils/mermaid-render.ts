@@ -6,6 +6,9 @@
 
 import _DOMPurifyModule from "dompurify";
 
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("mermaid");
 /** Get DOMPurify instance (browser + Bun/Node safe). */
 let _purifyInstance: typeof _DOMPurifyModule | null = null;
 function getDOMPurifyInstance(): typeof _DOMPurifyModule | null {
@@ -143,7 +146,7 @@ export async function renderMermaidDiagrams(container: HTMLElement): Promise<voi
   try {
     await ensureMermaidLoaded();
   } catch (e) {
-    console.warn("[mermaid] Failed to load vendor bundle:", e);
+    log.warn(Failed to load vendor bundle:", e);
     for (const el of pending) {
       el.innerHTML = '<pre class="mermaid-error">Mermaid library failed to load</pre>';
       el.removeAttribute("data-mermaid");
@@ -167,7 +170,7 @@ export async function renderMermaidDiagrams(container: HTMLElement): Promise<voi
       el.innerHTML = sanitizeSvg(svg);
       el.removeAttribute("data-mermaid");
     } catch (e: unknown) {
-      console.error("[mermaid] Render error:", e);
+      log.error(Render error:", e);
       const pre = document.createElement("pre");
       pre.className = "mermaid-error";
       pre.textContent = `Diagram error: ${e instanceof Error ? e.message : String(e)}`;

@@ -4,6 +4,9 @@ import { useDialog } from "../hooks/useDialog";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 import {
   chatName,
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("session-pill");
   extractChatJidFromAction,
   loadMergedSessions,
   sanitizeSessionName,
@@ -40,7 +43,7 @@ export function SessionPill() {
       setSessions(mergedSessions);
       setStatus("idle");
     } catch (err) {
-      console.warn("[session-pill] failed to load sessions:", err);
+      log.warn(failed to load sessions:", err);
       setStatus("error");
     }
   }, [activeChatJid]);
@@ -88,7 +91,7 @@ export function SessionPill() {
         goToChat(nextChatJid);
       }
     } catch (err) {
-      console.warn(`[session-pill] ${actionKey} failed:`, err);
+      log.warn(${actionKey} failed:`, err);
     } finally {
       setActionBusy(null);
       setIsOpen(false);

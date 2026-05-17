@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from "preact/hooks";
 import { getChatJid } from "../api/chat-jid";
 import {
   chatName,
+
+import { createLogger } from "../utils/logger";
+const log = createLogger("tasks");
   extractChatJidFromAction,
   loadMergedSessions,
   sanitizeSessionName,
@@ -134,7 +137,7 @@ function TasksTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, id, allow_internal: true }),
       });
-      if (!res.ok) console.warn("[tasks] action failed:", res.status);
+      if (!res.ok) log.warn(action failed:", res.status);
       await fetchTasks();
     } finally {
       setActionBusy(null);
@@ -328,7 +331,7 @@ function SessionsTab({ activeChatJid }: SessionsTabProps) {
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
         const apiError = typeof errBody?.error === "string" ? errBody.error : null;
-        console.warn(`[tasks] ${actionKey} failed:`, res.status, apiError);
+        log.warn(${actionKey} failed:`, res.status, apiError);
         setActionError(apiError || errorMessage);
         return null;
       }
@@ -336,7 +339,7 @@ function SessionsTab({ activeChatJid }: SessionsTabProps) {
       await loadData();
       return extractChatJidFromAction(payload);
     } catch (err) {
-      console.warn(`[tasks] ${actionKey} failed:`, err);
+      log.warn(${actionKey} failed:`, err);
       setActionError(errorMessage);
       return null;
     } finally {
