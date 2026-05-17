@@ -21,6 +21,7 @@ import { useConnectionStatus } from "./app/useConnectionStatus";
 import { useTabs } from "./app/useTabs";
 import { TerminalPanel } from "./app/TerminalPanel";
 import { ExtensionFrame } from "./app/ExtensionFrame";
+import { EditorFrame } from "./app/EditorFrame";
 import { useDialog } from "./hooks/useDialog";
 import { ProviderWizard } from "./components/ProviderWizard";
 import { providerConfigured } from "./app/providerState";
@@ -48,6 +49,7 @@ function AppContent() {
   const extensionPageUrl = useSignal<string | null>(null);
   const extensionPageName = useSignal<string | null>(null);
   const extensionPageHtml = useSignal<string | null>(null);
+  const editorFilePath = useSignal<string | null>(null);
   const clockText = useSignal<string>(formatClock(new Date()));
   const sidebarWrapperRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -95,20 +97,29 @@ function AppContent() {
     extensionPageUrl.value = null;
     extensionPageName.value = null;
     extensionPageHtml.value = null;
-  }, [extensionPageUrl, extensionPageName, extensionPageHtml]);
+    editorFilePath.value = null;
+  }, [extensionPageUrl, extensionPageName, extensionPageHtml, editorFilePath]);
 
   useEffect(() => {
     const onOpenPage = (e: Event) => {
-      const detail = (e as CustomEvent<{ url?: string; name: string; html?: string; mode?: string; sourceUrl?: string }>).detail;
-      if (detail.mode === 'markdown' && detail.html && detail.name) {
+      const detail = (e as CustomEvent<{ url?: string; name: string; html?: string; mode?: string; sourceUrl?: string; path?: string }>).detail;
+      if (detail.mode === 'editor' && detail.path) {
+        extensionPageUrl.value = null;
+        extensionPageName.value = null;
+        extensionPageHtml.value = null;
+        editorFilePath.value = detail.path;
+      } else if (detail.mode === 'markdown' && detail.html && detail.name) {
+        editorFilePath.value = null;
         extensionPageUrl.value = null;
         extensionPageName.value = detail.name;
         extensionPageHtml.value = detail.html;
       } else if (detail.mode === 'pdf' && detail.sourceUrl && detail.name) {
+        editorFilePath.value = null;
         extensionPageUrl.value = detail.sourceUrl;
         extensionPageName.value = detail.name;
         extensionPageHtml.value = '__pdf__';
       } else if (detail.url && detail.name) {
+        editorFilePath.value = null;
         handlePageSelect(detail.url, detail.name);
       }
     };
@@ -178,6 +189,7 @@ function AppContent() {
 
   const connected = connectionStatus.value === "connected";
   const isExtensionPageOpen = (extensionPageUrl.value && isSafeExtensionUrl(extensionPageUrl.value)) || extensionPageHtml.value;
+  const isEditorOpen = !!editorFilePath.value;
   const hasWidgetTab = tabs.value.some((t) => t.type === "widget");
   const isWidgetActive = hasWidgetTab && tabs.value.some((t) => t.id === activeTabId.value && t.type === "widget");
   const isTerminalActive = activeTabId.value === "terminal";
@@ -219,7 +231,12 @@ function AppContent() {
                   clockText={clockText.value}
                 />
                 <div className="app-layout__tab-viewport">
-                  {isExtensionPageOpen ? (
+                  {isEditorOpen ? (
+                    <EditorFrame
+                      filePath={editorFilePath.value!}
+                      onBack={handleBackToChat}
+                    />
+                  ) : isExtensionPageOpen ? (
                     <ExtensionFrame
                       extensionPageUrl={extensionPageUrl.value}
                       extensionPageName={extensionPageName.value}

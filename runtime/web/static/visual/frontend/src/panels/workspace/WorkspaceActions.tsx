@@ -11,6 +11,20 @@ const OPENABLE_EXTS = new Set([
   'mp4', 'webm', 'mov',
 ]);
 
+const EDITABLE_EXTS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
+  'json', 'jsonc', 'jsonl',
+  'yaml', 'yml', 'toml',
+  'txt', 'log', 'cfg', 'ini', 'env',
+  'sh', 'bash', 'zsh', 'fish',
+  'py', 'rb', 'lua', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'java', 'kt', 'swift',
+  'css', 'scss', 'less',
+  'xml', 'svg',
+  'sql',
+  'dockerfile', 'makefile',
+  'gitignore', 'gitattributes', 'editorconfig',
+]);
+
 interface WorkspaceActionsProps {
   node: TreeNode;
   downloadUrl: string;
@@ -67,6 +81,12 @@ export function WorkspaceActions({ node, downloadUrl, isDeleting, onDelete }: Wo
     window.dispatchEvent(new CustomEvent('piclaw:open-page', { detail: { url: viewerUrl, name } }));
   }, [node.path, node.name, ext]);
 
+  const handleEditFile = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('piclaw:open-page', {
+      detail: { path: node.path, name: node.name, mode: 'editor' },
+    }));
+  }, [node.path, node.name]);
+
   return (
     <div className="workspace__preview-actions">
       <button
@@ -97,6 +117,15 @@ export function WorkspaceActions({ node, downloadUrl, isDeleting, onDelete }: Wo
           title="Open preview"
         >
           <span className="codicon codicon-open-preview" />
+        </button>
+      )}
+      {EDITABLE_EXTS.has(ext) && (
+        <button
+          className="workspace__action-icon workspace__action-icon--edit"
+          onClick={handleEditFile}
+          title="Edit file"
+        >
+          <span className="codicon codicon-edit" />
         </button>
       )}
       <button
