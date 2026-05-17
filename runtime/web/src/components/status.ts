@@ -192,14 +192,14 @@ export function resolveAgentStatusContent(status, options = {}) {
     } else if (status?.type === 'tool_call') {
         content = title ? `Running: ${title}` : 'Running tool...';
     } else if (status?.type === 'tool_status') {
-        content = title && isRedundantToolStatusText(statusText) ? title : (title ? `${title}: ${statusText || 'Working...'}` : (statusText || 'Working...'));
+        content = title && isRedundantToolStatusText(statusText) ? title : (title ? `${title}: ${statusText || 'Thinking...'}` : (statusText || 'Thinking...'));
     } else if (status?.type === 'error') {
         content = title || 'Agent error';
     } else {
-        content = title || statusText || 'Working...';
+        content = title || statusText || 'Thinking...';
     }
     if (!isLastActivity) return content;
-    if (content && content !== 'Working...') {
+    if (content && content !== 'Thinking...') {
         return `Recent activity: ${content}`;
     }
     return 'Last activity';
@@ -918,7 +918,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
                                                 onClick=${() => onExtensionPanelAction?.(panel, action)}
                                                 disabled=${Boolean(pending)}
                                             >
-                                                ${pending ? 'Working…' : (action?.label || 'Run')}
+                                                ${pending ? 'Thinking…' : (action?.label || 'Run')}
                                             </button>
                                         `;
                                     })}

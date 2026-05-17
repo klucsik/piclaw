@@ -102,7 +102,7 @@ export function applyExtensionUiWorkingState(
     // ctx.ui.setStatus(key, text) is the standard Pi extension progress path.
     // Keep structured status payloads such as context_usage out of the working
     // row, but let ordinary extension status text replace the generic
-    // "Working…" fallback while an extension/tool is active.
+    // "Thinking…" fallback while an extension/tool is active.
     // CRITICAL: preserve the existing working indicator exactly as-is. Many
     // extensions set the indicator separately from status text, and losing it
     // makes active tool/extension progress look stalled or invisible.

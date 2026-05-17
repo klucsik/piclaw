@@ -261,7 +261,7 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
     if (indicator?.mode === 'hidden') {
         return {
             visible: Boolean(message),
-            title: message || 'Working…',
+            title: message || 'Thinking…',
             indicatorText: null,
             animateDot: false,
             animateSpinner: false,
@@ -273,7 +273,7 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
         const safeIndex = Number.isFinite(frameIndex) && frameIndex >= 0 ? Math.floor(frameIndex) % frames.length : 0;
         return {
             visible: true,
-            title: message || 'Working…',
+            title: message || 'Thinking…',
             indicatorText: frames[safeIndex],
             animateDot: false,
             animateSpinner: false,
@@ -282,7 +282,7 @@ export function resolveComposeExtensionWorkingDisplay(workingState, frameIndex =
 
     return {
         visible: true,
-        title: message || 'Working…',
+        title: message || 'Thinking…',
         indicatorText: null,
         animateDot: false,
         animateSpinner: true,

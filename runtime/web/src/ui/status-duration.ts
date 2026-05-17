@@ -39,7 +39,7 @@ export function resolveStatusPanelTitle(status: Record<string, unknown> | null |
   const statusText = status.status;
   if (typeof statusText === "string" && statusText.trim()) return statusText.trim();
 
-  return isCompactionStatus(status) ? "Compacting context" : "Working...";
+  return isCompactionStatus(status) ? "Compacting context" : "Thinking...";
 }
 
 export function formatElapsedDuration(elapsedMs: number): string {
