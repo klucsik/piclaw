@@ -441,16 +441,12 @@ async function maybeAutoCompactSession(
       && isRecentCompactionFailure(previousBackoff)
       ? previousBackoff
       : null;
-    if (activeBackoff && isCompactionCancellationError(activeBackoff.lastErrorMessage)) {
+    if (activeBackoff && isCompactionCancellationError(activeBackoff.lastErrorMessage) && reason === "idle") {
       clearCompactionFailureBackoff(chatJid);
       options.onWarn?.(
-        reason === "idle"
-          ? "Idle auto-compaction clearing cancellation backoff"
-          : "Pre-prompt auto-compaction clearing cancellation backoff",
+        "Idle auto-compaction clearing cancellation backoff",
         {
-          operation: reason === "idle"
-            ? "schedule_idle_auto_compaction.backoff_cleared"
-            : "maybe_auto_compact_session_before_prompt.backoff_cleared",
+          operation: "schedule_idle_auto_compaction.backoff_cleared",
           chatJid,
           contextTokens: context.contextTokens,
           contextWindow: context.contextWindow,
@@ -518,7 +514,14 @@ async function maybeAutoCompactSession(
     );
     if (!compactionResult.ok) {
       const aborted = isCompactionCancellationError(compactionResult.errorMessage);
-      const failureState = aborted ? null : noteCompactionFailure(chatJid, compactionResult.errorMessage);
+      // Pre-prompt compaction runs can be deferred in the web channel. If a
+      // deferred compaction is cancelled and we do not record backoff, the
+      // resume path immediately re-selects the same pending message, crosses
+      // the same threshold, and starts compacting the same prompt chunk again.
+      // Idle compaction cancellation remains non-sticky so an explicit abort
+      // does not suppress future idle maintenance.
+      const shouldRecordFailure = !aborted || reason === "threshold";
+      const failureState = shouldRecordFailure ? noteCompactionFailure(chatJid, compactionResult.errorMessage) : null;
       onEvent?.({
         type: "compaction_end",
         reason,
@@ -526,7 +529,7 @@ async function maybeAutoCompactSession(
         aborted,
         willRetry: false,
         errorMessage: aborted
-          ? undefined
+          ? (reason === "threshold" ? compactionResult.errorMessage : undefined)
           : `${reason === "idle" ? "Idle compaction failed" : "Pre-prompt compaction failed"}: ${compactionResult.errorMessage}`,
       } as AgentSessionEvent);
       if (failureState) {

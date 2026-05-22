@@ -900,7 +900,11 @@ test("runAgentPrompt suppresses auto-compaction for chats under backoff after re
   }
 });
 
-test("runAgentPrompt does not enter compaction backoff for cancellation", async () => {
+test("runAgentPrompt records pre-prompt cancellation backoff while still prompting", async () => {
+  const restoreEnv = setEnv({
+    PICLAW_COMPACTION_BACKOFF_BASE_MS: "600000",
+    PICLAW_COMPACTION_BACKOFF_MAX_MS: "600000",
+  });
   const chatJid = `web:compaction-cancel-${Date.now()}`;
   const db = await import("../../src/db.js");
   db.initDatabase();
@@ -938,24 +942,31 @@ test("runAgentPrompt does not enter compaction backoff for cancellation", async 
     async abort() {}
   }
 
-  const session = new CancellingSession();
-  const result = await runAgentPrompt("test", chatJid, { timeoutMs: 0 }, {
-    getOrCreateRuntime: async () => createRuntime(session) as any,
-    turnCoordinator: new AgentTurnCoordinator({ takeAttachments: () => [], touchSession: () => {}, recordMessageUsage: () => {} }),
-    clearAttachments: () => {},
-    takeAttachments: () => [],
-    logsDir: createTestLogsDir(),
-    setActiveForkBaseLeaf: () => {},
-    clearActiveForkBaseLeaf: () => {},
-  });
+  try {
+    const session = new CancellingSession();
+    const result = await runAgentPrompt("test", chatJid, { timeoutMs: 0 }, {
+      getOrCreateRuntime: async () => createRuntime(session) as any,
+      turnCoordinator: new AgentTurnCoordinator({ takeAttachments: () => [], touchSession: () => {}, recordMessageUsage: () => {} }),
+      clearAttachments: () => {},
+      takeAttachments: () => [],
+      logsDir: createTestLogsDir(),
+      setActiveForkBaseLeaf: () => {},
+      clearActiveForkBaseLeaf: () => {},
+    });
 
-  expect(result.status).toBe("success");
-  expect(result.result).toBe("ok");
-  expect(session.calls).toEqual(["compact", "prompt"]);
-  expect(db.getChatCompactionBackoff(chatJid)).toBeNull();
+    expect(result.status).toBe("success");
+    expect(result.result).toBe("ok");
+    expect(session.calls).toEqual(["compact", "prompt"]);
+    expect(db.getChatCompactionBackoff(chatJid)).toEqual(expect.objectContaining({
+      failureCount: 1,
+      lastErrorMessage: "Compaction cancelled",
+    }));
+  } finally {
+    restoreEnv();
+  }
 });
 
-test("runAgentPrompt clears stale cancellation backoff and retries compaction", async () => {
+test("runAgentPrompt suppresses active cancellation backoff and prompts without re-compacting", async () => {
   const restoreEnv = setEnv({
     PICLAW_COMPACTION_BACKOFF_BASE_MS: "600000",
     PICLAW_COMPACTION_BACKOFF_MAX_MS: "600000",
@@ -1016,8 +1027,11 @@ test("runAgentPrompt clears stale cancellation backoff and retries compaction", 
 
     expect(result.status).toBe("success");
     expect(result.result).toBe("ok");
-    expect(session.calls).toEqual(["compact", "prompt"]);
-    expect(db.getChatCompactionBackoff(chatJid)).toBeNull();
+    expect(session.calls).toEqual(["prompt"]);
+    expect(db.getChatCompactionBackoff(chatJid)).toEqual(expect.objectContaining({
+      failureCount: 1,
+      lastErrorMessage: "Compaction cancelled",
+    }));
   } finally {
     restoreEnv();
   }
