@@ -7234,3 +7234,17 @@ mark[data-highlight] { border-radius: 2px; padding: 0 1px; }
 }
 
 
+
+/* ── Mobile sidebar backdrop (#615) ──────────────────────── */
+.app-layout__sidebar-backdrop {
+  display: none;
+}
+@media (max-width: 639px) {
+  .app-layout__sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 40px 0 0 0;
+    z-index: 49;
+    background: rgba(0, 0, 0, 0.4);
+  }
+}

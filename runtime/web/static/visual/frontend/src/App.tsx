@@ -211,6 +211,13 @@ function AppContent() {
           )}
           {!sidebarCollapsed.value && !isSettingsActive && (
             <div
+              className="app-layout__sidebar-backdrop"
+              onClick={() => { sidebarCollapsed.value = true; }}
+              aria-hidden="true"
+            />
+          )}
+          {!sidebarCollapsed.value && !isSettingsActive && (
+            <div
               className="app-layout__resize-handle"
               role="separator"
               aria-orientation="vertical"
