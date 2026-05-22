@@ -39,10 +39,6 @@ test("processMessages leaves lastAgentTimestamp unchanged when runAgent throws",
       state: state as any,
       assistantName: "Pi",
       triggerPattern: /@Pi/i,
-      whatsapp: {
-        sendMessage: async () => {},
-        setTyping: async () => {},
-      } as any,
       agentPool: {
         runAgent: async () => {
           throw new Error("agent crashed");
@@ -55,7 +51,7 @@ test("processMessages leaves lastAgentTimestamp unchanged when runAgent throws",
   });
 });
 
-test("processMessages persists lastAgentTimestamp after a recovered successful agent run without changing outbound text", async () => {
+test("processMessages persists lastAgentTimestamp after a recovered successful agent run", async () => {
   await withTempWorkspaceEnv("piclaw-message-loop-", { PICLAW_KEYCHAIN_KEY: "test-key" }, async () => {
     const db = await importFresh<typeof import("../../src/db.js")>("../src/db.js");
     const loop = await importFresh<typeof import("../../src/runtime/message-loop.js")>("../src/runtime/message-loop.js");
@@ -66,7 +62,6 @@ test("processMessages persists lastAgentTimestamp after a recovered successful a
     db.storeMessage(makeMessage(chatJid, "@Pi hello", timestamp));
 
     let saveCalls = 0;
-    const outbound: string[] = [];
     const state = {
       lastAgentTimestamp: {} as Record<string, string>,
       wasCommandProcessed: () => false,
@@ -80,12 +75,6 @@ test("processMessages persists lastAgentTimestamp after a recovered successful a
       state: state as any,
       assistantName: "Pi",
       triggerPattern: /@Pi/i,
-      whatsapp: {
-        sendMessage: async (_jid: string, text: string) => {
-          outbound.push(text);
-        },
-        setTyping: async () => {},
-      } as any,
       agentPool: {
         runAgent: async () => ({
           status: "success",
@@ -105,7 +94,6 @@ test("processMessages persists lastAgentTimestamp after a recovered successful a
     expect(ok).toBe(true);
     expect(state.lastAgentTimestamp[chatJid]).toBe(timestamp);
     expect(saveCalls).toBe(1);
-    expect(outbound).toEqual(["done"]);
   });
 });
 
@@ -131,10 +119,6 @@ test("processMessages treats leading path-like slash text after trigger as a nor
       state: state as any,
       assistantName: "Pi",
       triggerPattern: /@Pi/i,
-      whatsapp: {
-        sendMessage: async () => {},
-        setTyping: async () => {},
-      } as any,
       agentPool: {
         applySlashCommand: async () => {
           throw new Error("path-like slash text must not execute as slash command");
@@ -163,7 +147,6 @@ test("processMessages persists lastAgentTimestamp after a successful agent run",
     db.storeMessage(makeMessage(chatJid, "@Pi hello", timestamp));
 
     let saveCalls = 0;
-    const outbound: string[] = [];
     const state = {
       lastAgentTimestamp: {} as Record<string, string>,
       wasCommandProcessed: () => false,
@@ -177,12 +160,6 @@ test("processMessages persists lastAgentTimestamp after a successful agent run",
       state: state as any,
       assistantName: "Pi",
       triggerPattern: /@Pi/i,
-      whatsapp: {
-        sendMessage: async (_jid: string, text: string) => {
-          outbound.push(text);
-        },
-        setTyping: async () => {},
-      } as any,
       agentPool: {
         runAgent: async () => ({
           status: "success",
@@ -194,6 +171,5 @@ test("processMessages persists lastAgentTimestamp after a successful agent run",
     expect(ok).toBe(true);
     expect(state.lastAgentTimestamp[chatJid]).toBe(timestamp);
     expect(saveCalls).toBe(1);
-    expect(outbound).toEqual(["done"]);
   });
 });

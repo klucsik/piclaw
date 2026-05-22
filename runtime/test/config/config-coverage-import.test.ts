@@ -60,7 +60,6 @@ test("plain import covers config module init branches with isolated argv and env
       debugCardSubmissions: "off",
       sessionMaxSizeMb: "64",
       sessionAutoRotate: "true",
-      whatsappPhone: "+15557650000",
     });
 
     const { snapshot, stderr } = loadConfigInSubprocess(
@@ -100,9 +99,6 @@ test("plain import covers config module init branches with isolated argv and env
         "PUSHOVER_CONFIG",
         "call:getPushoverConfig",
         "same:getPushoverConfig:PUSHOVER_CONFIG",
-        "WHATSAPP_CONFIG",
-        "call:getWhatsAppConfig",
-        "same:getWhatsAppConfig:WHATSAPP_CONFIG",
       ],
       {
         env: {
@@ -188,8 +184,6 @@ test("plain import covers config module init branches with isolated argv and env
     expect(snapshot["same:getToolActivationConfig:TOOL_ACTIVATION_CONFIG"]).toBe(true);
     expect(snapshot.PUSHOVER_CONFIG).toEqual({ appToken: "push-app", userKey: "push-user", device: "push-device", priority: 1, sound: "magic" });
     expect(snapshot["same:getPushoverConfig:PUSHOVER_CONFIG"]).toBe(true);
-    expect(snapshot.WHATSAPP_CONFIG).toEqual({ enabled: false, phoneNumber: "+15557650000" });
-    expect(snapshot["same:getWhatsAppConfig:WHATSAPP_CONFIG"]).toBe(true);
 
     expect(stderr).toContain("Deprecated environment variable is set");
     expect(stderr).toContain('"oldName":"ASSISTANT_NAME"');

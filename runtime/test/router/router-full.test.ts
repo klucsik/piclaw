@@ -14,6 +14,7 @@ import {
   formatMessages,
   stripInternalTags,
   formatOutbound,
+  registerChannelDetector,
 } from "../../src/router.js";
 
 describe("router", () => {
@@ -22,9 +23,16 @@ describe("router", () => {
     expect(detectChannel("web:other")).toBe("web");
   });
 
-  test("detectChannel identifies whatsapp", () => {
-    expect(detectChannel("1234@s.whatsapp.net")).toBe("whatsapp");
-    expect(detectChannel("group@g.us")).toBe("whatsapp");
+  test("detectChannel identifies addon-registered channels", () => {
+    const unregister = registerChannelDetector((jid) =>
+      jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us") ? "whatsapp" : null
+    );
+    try {
+      expect(detectChannel("1234@s.whatsapp.net")).toBe("whatsapp");
+      expect(detectChannel("group@g.us")).toBe("whatsapp");
+    } finally {
+      unregister();
+    }
   });
 
   test("detectChannel handles edge cases", () => {

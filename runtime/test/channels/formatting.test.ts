@@ -3,7 +3,7 @@ import { buildChannelSystemPromptAppendix, getChannelFormattingInstructions } fr
 
 test("getChannelFormattingInstructions returns known channel hints", () => {
   expect(getChannelFormattingInstructions("web")).toContain("Use Markdown formatting");
-  expect(getChannelFormattingInstructions("whatsapp")).toContain("Use WhatsApp formatting only");
+  expect(getChannelFormattingInstructions("whatsapp")).toBeNull();
   expect(getChannelFormattingInstructions("unknown")).toBeNull();
 });
 

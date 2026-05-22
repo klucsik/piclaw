@@ -20,8 +20,6 @@ describe("runtime wiring", () => {
 
   test("createRuntimeSenders routes web chat messages to web channel", async () => {
     const webCalls: Array<{ jid: string; text: string; source?: string }> = [];
-    const whatsappCalls: Array<{ jid: string; text: string }> = [];
-
     const senders = createRuntimeSenders(
       {
         sendMessage: async (jid, text, options) => {
@@ -30,11 +28,6 @@ describe("runtime wiring", () => {
         resumeChat: () => {},
         resumePendingChats: () => {},
       },
-      {
-        sendMessage: async (jid, text) => {
-          whatsappCalls.push({ jid, text });
-        },
-      },
       null
     );
 
@@ -42,12 +35,10 @@ describe("runtime wiring", () => {
 
     expect(webCalls).toHaveLength(1);
     expect(webCalls[0]).toEqual({ jid: "web:default", text: "hello", source: "scheduled" });
-    expect(whatsappCalls).toHaveLength(0);
   });
 
-  test("createRuntimeSenders routes non-web chat messages to whatsapp channel", async () => {
+  test("createRuntimeSenders ignores non-web chat messages without a core channel", async () => {
     const webCalls: Array<{ jid: string; text: string }> = [];
-    const whatsappCalls: Array<{ jid: string; text: string }> = [];
 
     const senders = createRuntimeSenders(
       {
@@ -57,18 +48,12 @@ describe("runtime wiring", () => {
         resumeChat: () => {},
         resumePendingChats: () => {},
       },
-      {
-        sendMessage: async (jid, text) => {
-          whatsappCalls.push({ jid, text });
-        },
-      },
       null
     );
 
     await senders.sendMessage("12345@s.whatsapp.net", "hi");
 
     expect(webCalls).toHaveLength(0);
-    expect(whatsappCalls).toEqual([{ jid: "12345@s.whatsapp.net", text: "hi" }]);
   });
 
   test("workspaceNeedsDreamBootstrap only requires the core Dream memory files", async () => {
@@ -129,9 +114,6 @@ describe("runtime wiring", () => {
         sendMessage: async () => {},
         resumeChat: () => {},
         resumePendingChats: () => {},
-      },
-      {
-        sendMessage: async () => {},
       },
       {
         sendMessage: async (_jid, text) => {
