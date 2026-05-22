@@ -1133,9 +1133,13 @@ function streamAzureOpenAIResponses(model: any, context: any, options: any) {
         stream: true,
       };
 
-      // Only include OpenAI-specific params for models that support them
-      if (reasoningEnabled) {
+      // prompt_cache_key enables server-side prefix caching — send for all models
+      if (cacheSessionId) {
         params.prompt_cache_key = cacheSessionId;
+      }
+
+      // Reasoning-specific params
+      if (reasoningEnabled) {
         params.text = getAzureResponsesTextConfig(options?.textVerbosity);
       }
 
