@@ -831,7 +831,9 @@ body {
   min-width: 260px;
   max-width: 340px;
   max-height: 360px;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -840,6 +842,10 @@ body {
 
 .session-pill__section {
   padding: 6px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
 }
 
 .session-pill__item {
@@ -977,6 +983,7 @@ body {
   padding: 6px 8px;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 4px;
 }
 
