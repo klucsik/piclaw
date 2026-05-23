@@ -131,9 +131,9 @@ describe("ssh-core helpers", () => {
   });
 
   test("buildScopedBashCommand wraps commands in a clean bash scope and env", () => {
-    expect(buildScopedBashCommand("echo hi")).toContain("bash --noprofile --norc -lc 'echo hi'");
+    expect(buildScopedBashCommand("echo hi")).toContain("sh -c 'echo hi'");
     expect(buildScopedBashCommand("echo $TOKEN", { TOKEN: "secret", USERNAME: "alice" })).toContain(
-      "env TOKEN='secret' USERNAME='alice' bash --noprofile --norc -lc 'echo $TOKEN'"
+      "env TOKEN='secret' USERNAME='alice' sh -c 'echo $TOKEN'"
     );
   });
 

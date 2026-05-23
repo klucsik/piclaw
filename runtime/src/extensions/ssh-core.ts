@@ -98,7 +98,7 @@ export function buildScopedBashCommand(command: string, env?: NodeJS.ProcessEnv)
   const envPrefix = envEntries.length > 0
     ? `env ${envEntries.map(([key, value]) => `${key}=${shellQuote(String(value))}`).join(" ")} `
     : "";
-  return `${envPrefix}bash --noprofile --norc -lc ${shellQuote(command)}`;
+  return `${envPrefix}sh -c ${shellQuote(command)}`;
 }
 
 function parseDelimitedShellOutput(
@@ -333,7 +333,7 @@ export class PersistentRemoteShell {
     if (this.disposed) throw new Error("Remote shell is disposed");
     if (this.child && !this.child.killed) return;
 
-    const child = persistentSshSpawn([...buildSshBaseArgs(this.connection), "-tt", this.connection.sshTarget], {
+    const child = persistentSshSpawn([...buildSshBaseArgs(this.connection), "-T", this.connection.sshTarget, "/bin/sh", "-s"], {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -370,11 +370,8 @@ export class PersistentRemoteShell {
     child.stderr.on("data", (chunk: Buffer) => this.handleStderr(chunk));
     this.child = child;
     this.child.stdin.write(
-      "stty -echo 2>/dev/null || true; unset PROMPT_COMMAND 2>/dev/null || true; PS1=''; PS2=''; PROMPT=''; RPROMPT=''; " +
-        "unset HISTFILE 2>/dev/null || true; export HISTFILE=/dev/null; set +o history 2>/dev/null || true; " +
-        "export PAGER=cat; export GIT_PAGER=cat; export GIT_TERMINAL_PROMPT=0; " +
-        "if [ -n \"${ZSH_VERSION-}\" ]; then precmd_functions=(); preexec_functions=(); chpwd_functions=(); unset zle_bracketed_paste 2>/dev/null || true; fi; " +
-        "if [ -n \"${BASH_VERSION-}\" ]; then bind 'set enable-bracketed-paste off' 2>/dev/null || true; fi\n",
+      "export HISTFILE=/dev/null; set +o history 2>/dev/null || true; " +
+        "export PAGER=cat; export GIT_PAGER=cat; export GIT_TERMINAL_PROMPT=0\n",
     );
     this.child.stdin.write(`cd -- ${shellQuote(this.connection.remoteCwd)}\n`);
   }
@@ -613,6 +610,11 @@ class SshTransport implements RemoteTransport {
 
   async dispose(): Promise<void> {
     await this.shell.dispose();
+    // Ask ControlMaster to exit before removing the socket
+    try {
+      const { execFileSync } = await import("node:child_process");
+      execFileSync("ssh", ["-O", "exit", "-o", `ControlPath=${this.connection.controlPath}`, this.connection.sshTarget], { timeout: 5000, stdio: "ignore" });
+    } catch { /* best-effort — may already be gone */ }
     rmSync(this.connection.tempDir, { recursive: true, force: true });
   }
 
