@@ -234,9 +234,16 @@ function listAddonPackageDirs(addonsNodeModulesDir: string): string[] {
   for (const entry of readdirSync(addonsNodeModulesDir, { withFileTypes: true })) {
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const entryPath = join(addonsNodeModulesDir, entry.name);
+    if (!existsSync(entryPath)) continue; // broken symlink
     if (entry.name.startsWith("@")) {
-      for (const scoped of readdirSync(entryPath, { withFileTypes: true })) {
-        if (scoped.isDirectory() || scoped.isSymbolicLink()) results.push(join(entryPath, scoped.name));
+      try {
+        for (const scoped of readdirSync(entryPath, { withFileTypes: true })) {
+          if (!scoped.isDirectory() && !scoped.isSymbolicLink()) continue;
+          const scopedPath = join(entryPath, scoped.name);
+          if (existsSync(scopedPath)) results.push(scopedPath);
+        }
+      } catch {
+        // Skip unreadable scoped directories (broken symlinks, permission errors)
       }
       continue;
     }
