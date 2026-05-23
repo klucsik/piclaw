@@ -434,7 +434,7 @@
     min-height: 50px;
     max-height: min(40vh, 300px);
     border: none;
-    resize: none;
+    resize: vertical;
     field-sizing: content;
     font-family: inherit;
     font-size: var(--chat-content-font-size);

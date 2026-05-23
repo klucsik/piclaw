@@ -370,8 +370,7 @@ export class PersistentRemoteShell {
     child.stderr.on("data", (chunk: Buffer) => this.handleStderr(chunk));
     this.child = child;
     this.child.stdin.write(
-      "export HISTFILE=/dev/null; set +o history 2>/dev/null || true; " +
-        "export PAGER=cat; export GIT_PAGER=cat; export GIT_TERMINAL_PROMPT=0\n",
+      "export HISTFILE=/dev/null; export PAGER=cat; export GIT_PAGER=cat; export GIT_TERMINAL_PROMPT=0\n",
     );
     this.child.stdin.write(`cd -- ${shellQuote(this.connection.remoteCwd)}\n`);
   }
