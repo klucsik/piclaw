@@ -84,6 +84,7 @@ class LivePreviewPlugin {
     private selectionLineSignature: string;
     private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
     private view: EditorView;
+    private destroyed = false;
 
     constructor(view: EditorView) {
         this.view = view;
@@ -106,13 +107,14 @@ class LivePreviewPlugin {
 
         if (update.docChanged) {
             // During typing: debounce the expensive rebuild.
-            // Return stale decorations for this frame — rebuild after idle.
             if (this.rebuildTimer !== null) clearTimeout(this.rebuildTimer);
             this.rebuildTimer = setTimeout(() => {
                 this.rebuildTimer = null;
+                if (this.destroyed) return;
                 this.decorations = this.buildDecorations(this.view);
-                // Force CM to pick up the new decorations
-                this.view.dispatch({ effects: [] });
+                // Nudge CM to read the updated decorations via a minimal
+                // requestMeasure — avoids dispatch({ effects: [] }) infinite loop.
+                this.view.requestMeasure();
             }, LIVE_PREVIEW_DEBOUNCE_MS);
         } else {
             // Viewport/selection changes: rebuild immediately (no typing lag)
@@ -122,6 +124,7 @@ class LivePreviewPlugin {
     }
 
     destroy() {
+        this.destroyed = true;
         if (this.rebuildTimer !== null) { clearTimeout(this.rebuildTimer); this.rebuildTimer = null; }
     }
 
