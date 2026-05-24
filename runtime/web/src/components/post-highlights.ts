@@ -108,12 +108,35 @@ export async function persistAside(
   return current;
 }
 
+
+// ── Remove annotations via API ──────────────────────────────────
+
+export async function removeAnnotationAtIndex(
+  postId: number,
+  chatJid: string,
+  existingAnnotations: unknown[] | undefined | null,
+  index: number,
+): Promise<unknown[]> {
+  const current = Array.isArray(existingAnnotations) ? [...existingAnnotations] : [];
+  if (index < 0 || index >= current.length) return current;
+  current.splice(index, 1);
+  await savePostAnnotations(postId, current, chatJid);
+  return current;
+}
+
 // ── DOM application ─────────────────────────────────────────────
 
 function collectTextNodes(root: Node): { node: Text; offset: number }[] {
   const result: { node: Text; offset: number }[] = [];
   let offset = 0;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      // Skip text inside injected annotation elements (pills, aside content)
+      const parent = node.parentElement;
+      if (parent?.closest('.post-aside-pill, .post-aside-content')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
   while (walker.nextNode()) {
     const node = walker.currentNode as Text;
     result.push({ node, offset });
@@ -222,8 +245,9 @@ export function getSelectionInElement(element: HTMLElement): {
   const text = sel.toString().trim();
   if (!text) return null;
 
-  const fullText = element.textContent ?? '';
+  // Compute clean text content excluding injected annotation elements
   const textNodes = collectTextNodes(element);
+  const cleanText = textNodes.map(({ node }) => node.textContent ?? '').join('');
   let textOffset = -1;
 
   for (const { node, offset } of textNodes) {
@@ -234,7 +258,7 @@ export function getSelectionInElement(element: HTMLElement): {
   }
 
   if (textOffset < 0) {
-    textOffset = fullText.indexOf(text);
+    textOffset = cleanText.indexOf(text);
   }
 
   if (textOffset < 0) return null;

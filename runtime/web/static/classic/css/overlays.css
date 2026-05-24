@@ -1019,8 +1019,9 @@ mark.post-highlight {
     margin: 0 2px;
     padding: 1px 6px;
     border-radius: 10px;
-    background: var(--accent-soft, rgba(29, 155, 240, 0.15));
+    background: color-mix(in srgb, var(--accent-color, #1d9bf0) 20%, var(--bg-secondary, #1e2028));
     color: var(--accent-color, #1d9bf0);
+    border: 1px solid color-mix(in srgb, var(--accent-color, #1d9bf0) 40%, transparent);
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 1px;

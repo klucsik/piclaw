@@ -21,6 +21,7 @@ import {
     HIGHLIGHT_COLORS,
     persistHighlight,
     persistAside,
+    removeAnnotationAtIndex,
     type PostHighlight,
     type PostAside,
 } from './post-highlights.js';
@@ -1291,12 +1292,48 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
     // Re-apply saved text highlights and asides after content renders
     useEffect(() => {
         if (!contentRef.current) return;
-        // Remove any previously inserted pills/asides before re-applying
-        contentRef.current.querySelectorAll('.post-aside-pill, .post-aside-content').forEach((el) => el.remove());
-        const highlights = extractHighlightsFromAnnotations(data.annotations);
+        // Remove any previously inserted pills/asides/marks before re-applying
+        contentRef.current.querySelectorAll('.post-aside-pill, .post-aside-content, mark.post-highlight').forEach((el) => {
+            // Unwrap marks back to text
+            if (el.tagName === 'MARK') {
+                const parent = el.parentNode;
+                while (el.firstChild) parent?.insertBefore(el.firstChild, el);
+                el.remove();
+            } else {
+                el.remove();
+            }
+        });
+        // Normalize text nodes after unwrapping
+        contentRef.current.normalize();
+
+        const annotations = Array.isArray(data.annotations) ? data.annotations : [];
+        const highlights = extractHighlightsFromAnnotations(annotations);
         if (highlights.length > 0) applyHighlightsToElement(contentRef.current, highlights);
-        const asides = extractAsidesFromAnnotations(data.annotations);
+        const asides = extractAsidesFromAnnotations(annotations);
         if (asides.length > 0) applyAsidesToElement(contentRef.current, asides);
+
+        // Add click-to-remove on highlights
+        const marks = contentRef.current.querySelectorAll('mark.post-highlight');
+        marks.forEach((mark) => {
+            (mark as HTMLElement).style.cursor = 'pointer';
+            (mark as HTMLElement).title = 'Click to remove highlight';
+            mark.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const markText = mark.textContent ?? '';
+                const idx = annotations.findIndex((a: any) =>
+                    a?.type === 'highlight' && a?.text === markText
+                );
+                if (idx >= 0) {
+                    try {
+                        const updated = await removeAnnotationAtIndex(post.id, post.chat_jid, annotations, idx);
+                        data.annotations = updated;
+                        setHighlightVersion((v) => v + 1);
+                    } catch (err) {
+                        console.warn('[post] Failed to remove highlight:', err);
+                    }
+                }
+            }, { once: true });
+        });
     }, [renderedHtml, highlightVersion]);
 
     // Listen for text selection to show highlight popup
