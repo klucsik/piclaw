@@ -159,9 +159,9 @@ export class UiBridge {
       onError: (error) => {
         const message = typeof error?.error === "string" ? error.error : String(error?.error ?? error);
         const staleSessionCtx = message.includes("This extension ctx is stale after session replacement or reload");
-        if (staleSessionCtx && boundSession !== runtime.session) {
-          debugSuppressedError(log, "Suppressed stale extension UI error from replaced session", {
-            operation: "web_theming_ui_bridge.on_error.stale_replaced_session",
+        if (staleSessionCtx) {
+          debugSuppressedError(log, "Suppressed stale extension ctx error (always benign after idle/resume)", {
+            operation: "web_theming_ui_bridge.on_error.stale_ctx_suppressed",
             chatJid,
             event: error?.event,
             extensionPath: error?.extensionPath,
