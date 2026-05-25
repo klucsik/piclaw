@@ -48,6 +48,61 @@ function createPersistedSession(workspace: string, sessionDir: string, sessionNa
   };
 }
 
+test("rotateSession times out stuck compaction and leaves the active session in place", async () => {
+  const workspace = createTempWorkspace("piclaw-rotate-session-timeout-");
+  cleanupWorkspace = workspace.cleanup;
+  restoreEnv = setEnv({
+    PICLAW_WORKSPACE: workspace.workspace,
+    PICLAW_STORE: workspace.store,
+    PICLAW_DATA: workspace.data,
+    PICLAW_COMPACTION_TIMEOUT_MS: "5",
+  });
+
+  const { rotateSession, getArchivePath } = await importFresh<typeof import("../src/session-rotation.js")>("../src/session-rotation.js");
+  const sessionDir = join(workspace.workspace, "session-rotation-timeout");
+  const originalSession = createPersistedSession(workspace.workspace, sessionDir, "Timeout session");
+  const previousSessionFile = originalSession.sessionFile;
+  expect(previousSessionFile).toBeTruthy();
+
+  let abortCalls = 0;
+  let releaseCompaction!: () => void;
+  const session = {
+    ...originalSession,
+    async compact() {
+      await new Promise<void>((resolve) => {
+        releaseCompaction = resolve;
+      });
+    },
+    async abort() {
+      abortCalls += 1;
+      releaseCompaction?.();
+    },
+  };
+  const runtime = {
+    session,
+    cwd: workspace.workspace,
+    diagnostics: [],
+    services: {} as any,
+    modelFallbackMessage: undefined,
+    newSession: async () => {
+      throw new Error("newSession should not be called after compaction timeout");
+    },
+    switchSession: async () => ({ cancelled: false }),
+    fork: async () => ({ cancelled: false }),
+    importFromJsonl: async () => ({ cancelled: false }),
+    dispose: async () => {},
+  } as AgentSessionRuntime;
+
+  const result = await rotateSession(session as any, runtime, { reason: "manual", chatJid: "web:rotation-timeout" });
+
+  expect(result.status).toBe("error");
+  expect(result.message).toContain("Compaction timed out");
+  expect(abortCalls).toBe(1);
+  expect(runtime.session.sessionFile).toBe(previousSessionFile);
+  expect(existsSync(previousSessionFile!)).toBe(true);
+  expect(existsSync(getArchivePath(previousSessionFile!))).toBe(false);
+});
+
 test("rotateSession emergency fallback archives bloated context when compaction fails", async () => {
   const workspace = createTempWorkspace("piclaw-rotate-session-emergency-");
   cleanupWorkspace = workspace.cleanup;

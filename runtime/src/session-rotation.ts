@@ -11,6 +11,10 @@ import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/openai-
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { basename, dirname, extname, join } from "path";
 import { formatBytes } from "./agent-control/agent-control-helpers.js";
+import { runCompactionWithTimeout } from "./agent-pool/compaction.js";
+import { createLogger } from "./utils/logger.js";
+
+const log = createLogger("session-rotation");
 
 type PersistableSessionMessage = Parameters<SessionManager["appendMessage"]>[0];
 
@@ -39,6 +43,8 @@ export interface SessionRotationOptions {
   skipCompaction?: boolean;
   /** Human-readable reason included in summary-only emergency successors. */
   emergencyReason?: string;
+  /** Chat JID used to scope compaction timeout/single-flight state and logs. */
+  chatJid?: string;
 }
 
 /** Default compaction prompt used before a rotation handoff. */
@@ -337,11 +343,17 @@ export async function rotateSession(
   let emergencyFallback = Boolean(options.skipCompaction);
   let emergencyReason = options.emergencyReason?.trim() || null;
   if (!options.skipCompaction) {
-    try {
-      await session.compact(compactionInstructions);
+    const compactionResult = await runCompactionWithTimeout(
+      session,
+      options.chatJid ?? `session-rotation:${previousSessionId ?? previousSessionFile}`,
+      { onWarn: (message, details) => log.warn(message, details) },
+      async () => await session.compact(compactionInstructions),
+      "rotation",
+    );
+    if (compactionResult.ok) {
       compacted = true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } else {
+      const message = compactionResult.errorMessage;
       if (!isRotationFallbackCompactionError(message)) {
         if (!options.fallbackOnCompactionFailure) {
           return { status: "error", reason, compacted, message };

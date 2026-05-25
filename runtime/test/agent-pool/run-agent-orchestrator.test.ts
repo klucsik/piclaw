@@ -116,8 +116,11 @@ test("runAgentPrompt aborts and returns an interrupted result when active progre
       onWarn: (_message, details) => logs.push(details),
     });
 
-    await Bun.sleep(15);
-    const stalls = scanForStalls(Date.now());
+    let stalls = scanForStalls(Date.now());
+    for (let attempt = 0; stalls.length === 0 && attempt < 20; attempt += 1) {
+      await Bun.sleep(10);
+      stalls = scanForStalls(Date.now());
+    }
     expect(stalls).toHaveLength(1);
 
     const result = await run;
@@ -619,6 +622,84 @@ test("runAgentPrompt skips Piclaw pre-prompt compaction when requested by the ca
 
   expect(result.status).toBe("success");
   expect(calls).toEqual(["prompt"]);
+});
+
+test("runAgentPrompt suppresses upstream auto-compaction inside session.prompt", async () => {
+  initDatabase();
+  const calls: string[] = [];
+  const warnings: Array<Record<string, unknown>> = [];
+
+  class StubSession {
+    private listeners: Array<(event: any) => void> = [];
+    sessionManager = {
+      getLeafId: () => "leaf-upstream-auto",
+      buildSessionContext: () => ({ messages: [{ role: "user", content: "short" }] }),
+    };
+    settingsManager = {
+      getCompactionSettings: () => ({
+        ...DEFAULT_COMPACTION_SETTINGS,
+        enabled: true,
+        reserveTokens: 25_000,
+      }),
+    };
+    model = { contextWindow: 1_000_000, provider: "test", id: "model" };
+    isStreaming = false;
+    isCompacting = false;
+    isRetrying = false;
+    subscribe(listener: (event: any) => void) {
+      this.listeners.push(listener);
+      return () => {
+        this.listeners = this.listeners.filter((entry) => entry !== listener);
+      };
+    }
+    async _checkCompaction() {
+      calls.push("upstreamCheckCompaction");
+      await this._runAutoCompaction("threshold", false);
+    }
+    async _runAutoCompaction() {
+      calls.push("upstreamRunAutoCompaction");
+      await new Promise(() => {});
+    }
+    async prompt() {
+      calls.push("prompt");
+      await this._checkCompaction();
+      for (const listener of this.listeners) {
+        listener({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "done" } });
+      }
+    }
+    async abort() {}
+  }
+
+  const session = new StubSession();
+  const turnCoordinator = new AgentTurnCoordinator({
+    takeAttachments: () => [],
+    touchSession: () => {},
+    recordMessageUsage: () => {},
+  });
+
+  const result = await runAgentPrompt("test", "web:upstream-auto-suppressed", {
+    timeoutMs: 0,
+    skipPrePromptCompaction: true,
+  }, {
+    getOrCreateRuntime: async () => createRuntime(session) as any,
+    onWarn: (_message, details) => warnings.push(details),
+    turnCoordinator,
+    clearAttachments: () => {},
+    takeAttachments: () => [],
+    logsDir: createTestLogsDir(),
+    setActiveForkBaseLeaf: () => {},
+    clearActiveForkBaseLeaf: () => {},
+  });
+
+  expect(result.status).toBe("success");
+  expect(result.result).toBe("done");
+  expect(calls).toEqual(["prompt"]);
+  expect(warnings).toContainEqual(expect.objectContaining({
+    operation: "run_agent.suppress_upstream_auto_compaction",
+    chatJid: "web:upstream-auto-suppressed",
+    method: "_checkCompaction",
+  }));
+  expect(typeof (session as any)._checkCompaction).toBe("function");
 });
 
 test.skip("runAgentPrompt still pre-prompt compacts even when upstream auto-compaction is disabled", async () => {

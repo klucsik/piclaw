@@ -393,6 +393,29 @@ export function getCompactionTimeoutMs(): number {
   return getCompactionRuntimeConfig().timeoutMs;
 }
 
+function markCompactionActiveBestEffort(chatJid: string, reason: string): void {
+  try {
+    markChatCompactionActive(chatJid, new Date().toISOString(), reason);
+  } catch (error) {
+    debugSuppressedError(log, "Failed to mark chat compaction active", error, {
+      operation: "compaction.mark_active",
+      chatJid,
+      reason,
+    });
+  }
+}
+
+function clearCompactionActiveBestEffort(chatJid: string): void {
+  try {
+    clearChatCompactionActive(chatJid);
+  } catch (error) {
+    debugSuppressedError(log, "Failed to clear chat compaction active", error, {
+      operation: "compaction.clear_active",
+      chatJid,
+    });
+  }
+}
+
 export async function abortCompactionBestEffort(
   session: AgentSession,
   chatJid: string,
@@ -455,7 +478,7 @@ async function runCompactionWithTimeoutExclusive<T>(
 ): Promise<CompactionOutcome<T>> {
   const timeoutMs = getCompactionTimeoutMs();
   updateSessionCompacting(chatJid, true);
-  markChatCompactionActive(chatJid, new Date().toISOString(), reason);
+  markCompactionActiveBestEffort(chatJid, reason);
   if (timeoutMs <= 0) {
     try {
       return { ok: true, result: await runCompact() };
@@ -464,7 +487,7 @@ async function runCompactionWithTimeoutExclusive<T>(
     } finally {
       clearContextEstimateCache(session);
       updateSessionCompacting(chatJid, false);
-      clearChatCompactionActive(chatJid);
+      clearCompactionActiveBestEffort(chatJid);
       clearActive();
     }
   }
@@ -481,7 +504,7 @@ async function runCompactionWithTimeoutExclusive<T>(
       if (timeoutId) clearTimeout(timeoutId);
       clearContextEstimateCache(session);
       updateSessionCompacting(chatJid, false);
-      clearChatCompactionActive(chatJid);
+      clearCompactionActiveBestEffort(chatJid);
       clearActive();
     });
 
@@ -508,7 +531,7 @@ async function runCompactionWithTimeoutExclusive<T>(
   ]);
 
   updateSessionCompacting(chatJid, false);
-  clearChatCompactionActive(chatJid);
+  clearCompactionActiveBestEffort(chatJid);
   // Release the in-memory single-flight lock after timeout+settlement grace
   // even if the upstream compaction promise never resolves. A late settlement
   // will run the promise's finally and call clearActive() again harmlessly.

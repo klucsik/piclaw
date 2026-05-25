@@ -506,6 +506,7 @@ export class AgentPool {
       reason: "automatic",
       skipCompaction: true,
       emergencyReason,
+      chatJid,
     });
     if (result.status === "success") {
       clearCompactionFailureBackoff(chatJid);

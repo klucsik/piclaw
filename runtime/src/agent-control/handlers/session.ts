@@ -96,13 +96,14 @@ export async function handleSwitchSession(session: AgentSession, runtime: AgentS
 
 /** Handle /session-rotate: archive the current session file and start a compact carried-forward successor. */
 export async function handleSessionRotate(session: AgentSession, runtime: AgentSessionRuntime, command: SessionRotateCommand): Promise<AgentControlResult> {
+  const chatJid = getChatJid("control:/session-rotate");
   const result = await rotateSession(session, runtime, {
     instructions: command.instructions,
     reason: "manual",
     fallbackOnCompactionFailure: true,
+    chatJid,
   });
   if (result.status === "success") {
-    const chatJid = getChatJid("control:/session-rotate");
     resetCompactionSuccessCount(chatJid);
     noteCompactionSuccess(runtime.session, chatJid, "rotation", {
       countSuccess: false,

@@ -101,7 +101,63 @@ type RecoveryFailureSignatureRecord = {
   signature: string;
 };
 
+type UpstreamAutoCompactionMethod = (...args: unknown[]) => unknown;
+
+type UpstreamAutoCompactionSession = Record<string, unknown> & {
+  _checkCompaction?: UpstreamAutoCompactionMethod;
+  _runAutoCompaction?: UpstreamAutoCompactionMethod;
+};
+
 const recentRecoveryFailuresByChat = new Map<string, RecoveryFailureSignatureRecord[]>();
+
+function suppressUpstreamAutoCompactionDuringPrompt(
+  session: AgentSession,
+  chatJid: string,
+  options: Pick<RunAgentOrchestratorOptions, "onWarn">,
+): () => void {
+  const upstream = session as unknown as UpstreamAutoCompactionSession;
+  const originalCheckCompaction = typeof upstream._checkCompaction === "function"
+    ? upstream._checkCompaction
+    : null;
+  const originalRunAutoCompaction = typeof upstream._runAutoCompaction === "function"
+    ? upstream._runAutoCompaction
+    : null;
+
+  if (!originalCheckCompaction && !originalRunAutoCompaction) return () => {};
+
+  let suppressedCount = 0;
+  const warnSuppressed = (method: "_checkCompaction" | "_runAutoCompaction", args: unknown[]) => {
+    suppressedCount += 1;
+    const details = {
+      operation: "run_agent.suppress_upstream_auto_compaction",
+      chatJid,
+      method,
+      suppressedCount,
+      reason: "Piclaw wraps compaction with its own timeout/backoff/recovery policy; upstream AgentSession auto-compaction has no wall-clock timeout.",
+      upstreamReason: typeof args[0] === "string" ? args[0] : undefined,
+    };
+    options.onWarn?.("Suppressed upstream unbounded auto-compaction during managed prompt", details);
+  };
+
+  const checkReplacement = async (...args: unknown[]) => {
+    warnSuppressed("_checkCompaction", args);
+  };
+  const runReplacement = async (...args: unknown[]) => {
+    warnSuppressed("_runAutoCompaction", args);
+  };
+
+  if (originalCheckCompaction) upstream._checkCompaction = checkReplacement;
+  if (originalRunAutoCompaction) upstream._runAutoCompaction = runReplacement;
+
+  return () => {
+    if (originalCheckCompaction && upstream._checkCompaction === checkReplacement) {
+      upstream._checkCompaction = originalCheckCompaction;
+    }
+    if (originalRunAutoCompaction && upstream._runAutoCompaction === runReplacement) {
+      upstream._runAutoCompaction = originalRunAutoCompaction;
+    }
+  };
+}
 
 function pruneRecoveryFailureMap(now: number, windowMs: number): void {
   for (const [chatJid, records] of recentRecoveryFailuresByChat.entries()) {
@@ -366,6 +422,7 @@ async function maybeAutoRotateSession(
   const result = await rotateSession(session, runtime, {
     reason: "automatic",
     fallbackOnCompactionFailure: true,
+    chatJid,
   });
   if (result.status === "success") {
     resetCompactionSuccessCount(chatJid);
@@ -947,6 +1004,7 @@ async function runPromptAttempt(
   });
 
   let promptThrownError: string | null = null;
+  const restoreUpstreamAutoCompaction = suppressUpstreamAutoCompactionDuringPrompt(session, chatJid, options);
   try {
     heartbeatTrackedPhase(chatJid, "prompt", { eventType: "prompt_start" });
     publishContextUsageUpdate("prompt_start", true);
@@ -974,6 +1032,7 @@ async function runPromptAttempt(
   } catch (error) {
     promptThrownError = error instanceof Error ? error.message : String(error);
   } finally {
+    restoreUpstreamAutoCompaction();
     finishPromptTimeout();
     unregisterProgressAborter();
     toolExecutionWatchdogHeartbeat.stop();
@@ -1192,6 +1251,7 @@ export async function runAgentPrompt(
           reason: "automatic",
           skipCompaction: true,
           emergencyReason: prePromptCompactionFailure,
+          chatJid,
         });
         if (rotation.status === "success") {
           clearCompactionFailureBackoff(chatJid);
