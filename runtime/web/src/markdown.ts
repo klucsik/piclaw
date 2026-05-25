@@ -1,14 +1,4 @@
-let _highlightCodeToHtml: ((code: string, language: string) => string) | null = null;
-let _highlightLoadPromise: Promise<void> | null = null;
-
-function ensureHighlighter(): void {
-  if (_highlightCodeToHtml || _highlightLoadPromise) return;
-  _highlightLoadPromise = import('./utils/code-highlighting.js').then((mod) => {
-    _highlightCodeToHtml = mod.highlightCodeToHtml;
-  }).catch(() => {
-    _highlightLoadPromise = Promise.resolve();
-  });
-}
+import { highlightCodeToHtml } from './utils/code-highlighting.js';
 import { getThemeMode } from './ui/theme.js';
 
 declare const katex: { renderToString: (tex: string, options?: Record<string, unknown>) => string };
@@ -449,12 +439,11 @@ function normalizeHtmlCodeTags(text) {
 
 export function applySyntaxHighlighting(html) {
     if (!html) return html;
-    ensureHighlighter();
     const highlighted = html.replace(/<pre><code(?:\s+class="language-([A-Za-z0-9_+-]+)")?>([\s\S]*?)<\/code><\/pre>/g, (match, lang, code) => {
         const normalizedLanguage = String(lang || '').trim().toLowerCase();
         const decodedCode = decodeEntitiesDeep(code, 2);
         const languageClass = normalizedLanguage || 'plaintext';
-        const highlightedCode = _highlightCodeToHtml ? _highlightCodeToHtml(decodedCode, normalizedLanguage) : decodedCode;
+        const highlightedCode = highlightCodeToHtml(decodedCode, normalizedLanguage);
         return `<pre><code class="hljs language-${escapeHtmlAttr(languageClass)}">${highlightedCode}</code></pre>`;
     });
     return highlighted
