@@ -21,6 +21,7 @@ describe("provider error classification", () => {
   const rateLimitPatterns = /\b429\b|rate[ -]?limit|too many requests|retry-after/i;
   const sessionCorruptionPatterns = /invalid_request_error|\b400\b.*(?:image|media_type|content|base64|tool_use_id|tool_result|tool_use)|media_type|image.*source|unexpected [`'\"]?tool_use_id[`'\"]?|tool_result.*corresponding.*tool_use/i;
   const modelConfigPatterns = /no model selected|select a model|use \/model|use \/login/i;
+  const modelAvailabilityPatterns = /unsupported model|model(?:\s+is)?\s+not supported|model unavailable/i;
 
   test("detects Anthropic auth expiry", () => {
     expect(authPatterns.test('Authentication failed for "anthropic". Credentials may have expired or network is unavailable. Run \'/login anthropic\' to re-authenticate.')).toBe(true);
@@ -69,6 +70,11 @@ describe("provider error classification", () => {
     expect(modelConfigPatterns.test("No model selected. Use /model to select a model.")).toBe(true);
   });
 
+  test("detects model availability errors", () => {
+    expect(modelAvailabilityPatterns.test("400 Model not supported")).toBe(true);
+    expect(modelAvailabilityPatterns.test("unsupported model: github-copilot/gpt-5.5")).toBe(true);
+  });
+
   test("does not false-positive on normal errors", () => {
     const normalError = "Connection reset by peer";
     expect(authPatterns.test(normalError)).toBe(false);
@@ -76,6 +82,7 @@ describe("provider error classification", () => {
     expect(rateLimitPatterns.test(normalError)).toBe(false);
     expect(sessionCorruptionPatterns.test(normalError)).toBe(false);
     expect(modelConfigPatterns.test(normalError)).toBe(false);
+    expect(modelAvailabilityPatterns.test(normalError)).toBe(false);
   });
 
   test("parses Codex JSON server error envelopes for display", () => {
@@ -103,5 +110,15 @@ describe("provider error classification", () => {
     expect(formatted?.category).toBe("network");
     expect(formatted?.title).toBe("Codex network error");
     expect(formatted?.label).toBe("network");
+  });
+
+  test("classifies plain model-not-supported outage text for display", () => {
+    const formatted = formatProviderError("400 Model not supported during GitHub provider outage");
+
+    expect(formatted?.category).toBe("model_availability");
+    expect(formatted?.title).toBe("GitHub Copilot model unavailable");
+    expect(formatted?.label).toBe("model");
+    expect(formatted?.severity).toBe("warning");
+    expect(formatted?.detail).toContain("temporary provider outage");
   });
 });

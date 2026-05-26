@@ -8,6 +8,7 @@ export type ProviderErrorCategory =
   | "quota"
   | "server"
   | "network"
+  | "model_availability"
   | "model_config"
   | "provider";
 
@@ -90,6 +91,8 @@ function extractRequestId(text: string, parsed: Record<string, unknown>, nested:
   return match?.[1] || null;
 }
 
+const MODEL_AVAILABILITY_PATTERN = /unsupported model|model(?:\s+is)?\s+not supported|model unavailable/i;
+
 function inferCategory(text: string): ProviderErrorCategory {
   if (/\b429\b|rate[ -]?limit|too many requests|retry-after/i.test(text)) return "rate_limit";
   if (/authentication failed|credentials may have expired|no api key(?: found| for provider)?|token refresh failed\s*:\s*401|re-authenticate|unauthorized|\b401\b|\b403\b|invalid.*api.*key|api.*key.*invalid|token.*expired|oauth.*expired|refresh.*token/i.test(text)) return "auth";
@@ -97,6 +100,7 @@ function inferCategory(text: string): ProviderErrorCategory {
   if (/\b5\d\d\b|server[_ -]?error|internal[_ -]?error|bad gateway|service unavailable|gateway timeout|overloaded/i.test(text)) return "server";
   if (/\bENOTFOUND\b|\bECONNREFUSED\b|\bETIMEDOUT\b|\bECONNRESET\b|getaddrinfo|dns.*failed|network.*error|connection.*(?:error|refused|lost|ended|closed)|websocket.*(?:closed|ended|1006)|fetch failed|socket hang up/i.test(text)) return "network";
   if (/no model selected|select a model|use \/model|use \/login|model not found|deployment.*not found/i.test(text)) return "model_config";
+  if (MODEL_AVAILABILITY_PATTERN.test(text)) return "model_availability";
   return "provider";
 }
 
@@ -113,6 +117,8 @@ function titleForCategory(category: ProviderErrorCategory, provider: string | nu
       return `${prefix}server error`;
     case "network":
       return `${prefix}network error`;
+    case "model_availability":
+      return provider ? `${provider} model unavailable` : "Model unavailable";
     case "model_config":
       return "Model configuration error";
     default:
@@ -132,6 +138,7 @@ function labelForCategory(category: ProviderErrorCategory): string {
       return "provider";
     case "network":
       return "network";
+    case "model_availability":
     case "model_config":
       return "model";
     default:
@@ -140,7 +147,9 @@ function labelForCategory(category: ProviderErrorCategory): string {
 }
 
 function severityForCategory(category: ProviderErrorCategory): ProviderErrorSeverity {
-  return category === "rate_limit" || category === "server" ? "warning" : "error";
+  return category === "rate_limit" || category === "server" || category === "model_availability"
+    ? "warning"
+    : "error";
 }
 
 function buildDetail(parsed: ParsedProviderError): string {
@@ -158,22 +167,37 @@ function buildDetail(parsed: ParsedProviderError): string {
   return details.join(" — ").slice(0, 900);
 }
 
+function inferProviderFromRawText(text: string): string | null {
+  const lower = text.toLowerCase();
+  if (lower.includes("github-copilot") || lower.includes("github copilot") || lower.includes("github provider")) return "GitHub Copilot";
+  if (lower.includes("openai-codex") || lower.includes(" codex ") || lower.startsWith("codex ")) return "Codex";
+  if (lower.includes("anthropic")) return "Anthropic";
+  if (lower.includes("openai")) return "OpenAI";
+  return null;
+}
+
 export function parseProviderError(errorText: string | null | undefined): ParsedProviderError | null {
   const raw = String(errorText || "").trim();
   if (!raw) return null;
 
   const prefixMatch = raw.match(/^([A-Za-z][A-Za-z0-9 ._-]{1,40})\s+error\s*:/i);
   const parsed = extractJsonObject(raw);
-  if (!parsed && !prefixMatch) return null;
+  const isModelAvailabilityOnly = MODEL_AVAILABILITY_PATTERN.test(raw);
+  if (!parsed && !prefixMatch && !isModelAvailabilityOnly) return null;
 
   const nested = asRecord(parsed?.error) || asRecord(parsed?.errors) || null;
   const message = readString(nested?.message, parsed?.message, nested?.error, parsed?.error_description, parsed?.detail)
     || (prefixMatch && !parsed ? raw.slice(prefixMatch[0].length).trim() : null)
     || raw;
-  const provider = titleCaseProvider(prefixMatch?.[1] || readString(parsed?.provider, parsed?.provider_id, nested?.provider));
+  const provider = titleCaseProvider(
+    prefixMatch?.[1]
+      || readString(parsed?.provider, parsed?.provider_id, nested?.provider)
+      || inferProviderFromRawText(raw)
+  );
   const code = readString(nested?.code, parsed?.code, nested?.error_code, parsed?.error_code);
   const type = readString(nested?.type, parsed?.type, nested?.error, parsed?.error);
-  const status = readNumber(nested?.status, nested?.status_code, parsed?.status, parsed?.status_code);
+  const statusFromRaw = raw.match(/\b([45]\d\d)\b/)?.[1];
+  const status = readNumber(nested?.status, nested?.status_code, parsed?.status, parsed?.status_code, statusFromRaw);
   const requestId = parsed ? extractRequestId(raw, parsed, nested) : extractRequestId(raw, {}, null);
   const sequenceNumber = readNumber(parsed?.sequence_number, parsed?.sequenceNumber, nested?.sequence_number, nested?.sequenceNumber);
 
@@ -192,18 +216,25 @@ export function formatProviderError(errorText: string | null | undefined): Provi
   const parsed = parseProviderError(errorText);
   if (!parsed) return null;
 
-  const category = inferCategory([
+  const classificationText = [
     parsed.message,
     parsed.type,
     parsed.code,
     parsed.status ? String(parsed.status) : "",
-  ].filter(Boolean).join(" "));
+  ].filter(Boolean).join(" ");
+  const category = inferCategory(classificationText);
+
+  let detail = buildDetail(parsed);
+  if (category === "model_availability") {
+    const guidance = "This may be a temporary provider outage even when your model is valid. Retry shortly or switch provider/model.";
+    detail = [detail, guidance].filter(Boolean).join(" — ").slice(0, 900);
+  }
 
   return {
     category,
     label: labelForCategory(category),
     title: titleForCategory(category, parsed.provider),
-    detail: buildDetail(parsed),
+    detail,
     severity: severityForCategory(category),
     requestId: parsed.requestId,
     code: parsed.code,
