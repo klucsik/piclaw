@@ -1,7 +1,10 @@
-import { getLocalStorageItem } from '../utils/storage.js';
+import { getLocalStorageItem, setLocalStorageItem } from '../utils/storage.js';
 
 /** Shared localStorage key for the BTW side-conversation session cache. */
 export const BTW_SESSION_KEY = 'piclaw_btw_session';
+
+/** Shared localStorage key for the last main chat session opened in the shell/PWA. */
+export const LAST_MAIN_CHAT_JID_KEY = 'piclaw_last_main_chat';
 
 /** Cooldown window that prevents duplicate branch-rename submits. */
 export const RENAME_BRANCH_FORM_GUARD_MS = 900;
@@ -64,6 +67,18 @@ export interface LoadStoredBtwSessionOptions {
   storageKey?: string;
 }
 
+/** Optional overrides for recovering the persisted last main chat id. */
+export interface LoadStoredLastMainChatJidOptions {
+  readItem?: (key: string) => string | null | undefined;
+  storageKey?: string;
+}
+
+/** Optional overrides for persisting the last main chat id. */
+export interface SaveStoredLastMainChatJidOptions {
+  writeItem?: (key: string, value: string) => void;
+  storageKey?: string;
+}
+
 /** Optional overrides for parsing location-driven app shell modes. */
 export interface ReadAppLocationModesOptions {
   defaultChatJid?: string;
@@ -99,6 +114,11 @@ function readAssetVersionFromImportMeta(importMetaUrl: string | null | undefined
 function readTextParam(locationParams: LocationParamsLike, key: string, fallback = ''): string {
   const raw = locationParams?.get?.(key);
   return raw && raw.trim() ? raw.trim() : fallback;
+}
+
+function normalizeChatJid(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || null;
 }
 
 /** Resolve the current authenticated app bundle version from import.meta or the loaded script tag. */
@@ -174,6 +194,23 @@ export function loadStoredBtwSession(options: LoadStoredBtwSessionOptions = {}):
   } catch {
     return null;
   }
+}
+
+/** Load the last main chat/session JID persisted for shell/PWA relaunch. */
+export function loadStoredLastMainChatJid(options: LoadStoredLastMainChatJidOptions = {}): string | null {
+  const readItem = typeof options.readItem === 'function' ? options.readItem : getLocalStorageItem;
+  const storageKey = options.storageKey || LAST_MAIN_CHAT_JID_KEY;
+  return normalizeChatJid(readItem(storageKey));
+}
+
+/** Persist the last main chat/session JID for shell/PWA relaunch. */
+export function saveStoredLastMainChatJid(chatJid: unknown, options: SaveStoredLastMainChatJidOptions = {}): string | null {
+  const normalized = normalizeChatJid(chatJid);
+  if (!normalized) return null;
+  const writeItem = typeof options.writeItem === 'function' ? options.writeItem : setLocalStorageItem;
+  const storageKey = options.storageKey || LAST_MAIN_CHAT_JID_KEY;
+  writeItem(storageKey, normalized);
+  return normalized;
 }
 
 /** Parse location-driven shell modes for the main app. */
