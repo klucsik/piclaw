@@ -1283,6 +1283,7 @@
     height: var(--app-height, 100dvh);
     min-height: 0;
     padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: var(--iphone-standalone-compose-safe-area-bottom, 0px);
     background-color: var(--bg-primary);
     display: flex;
     flex-direction: column;
