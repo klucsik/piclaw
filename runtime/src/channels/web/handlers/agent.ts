@@ -1979,7 +1979,7 @@ export async function processChat(
     }
 
     // Start the next queued follow-up only after this turn has fully finalized.
-    materializeNextDeferredFollowup();
+    await materializeNextDeferredFollowup();
 
     // If the exit_process tool was called during this turn, trigger graceful
     // shutdown now that the response has been persisted and broadcast.
