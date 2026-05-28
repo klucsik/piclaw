@@ -5,6 +5,11 @@ export function shouldUseStandaloneMobileViewportFix(runtime = {}) {
   return isStandaloneWebAppMode(runtime) && isMobileBrowserMode(runtime);
 }
 
+function isIphoneStandaloneComposeDevice(runtime = {}): boolean {
+  const nav = runtime.navigator ?? (typeof navigator !== 'undefined' ? navigator : null);
+  return /iPhone/i.test(String(nav?.userAgent || ''));
+}
+
 function shouldUseIphoneStandaloneComposeInset(runtime = {}): boolean {
   if (!shouldUseStandaloneMobileViewportFix(runtime)) return false;
   const nav = runtime.navigator ?? (typeof navigator !== 'undefined' ? navigator : null);
@@ -72,9 +77,12 @@ function measureSafeAreaInset(doc: any, edge: 'top' | 'bottom'): number {
 
 function readIphoneStandaloneBottomSafeArea(win: any, doc: any, options: { keyboardActive?: boolean } = {}): number {
   if (options.keyboardActive) return 0;
+  if (isIphoneStandaloneComposeDevice({ navigator: win?.navigator }) && isPortraitOrientation(win)) {
+    return IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX;
+  }
   const measuredBottom = measureSafeAreaInset(doc, 'bottom');
   if (measuredBottom > 0) return measuredBottom;
-  return isPortraitOrientation(win) ? IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX : 0;
+  return 0;
 }
 
 function buildIphoneStandaloneComposeInsetValue(win: any, doc: any, options: { keyboardActive?: boolean } = {}): string {
@@ -84,6 +92,13 @@ function buildIphoneStandaloneComposeInsetValue(win: any, doc: any, options: { k
   const totalInset = Math.max(0, compensation) + Math.max(0, safeBottom);
   if (totalInset > 0) {
     return `${totalInset}px`;
+  }
+  return 'env(safe-area-inset-bottom, 0px)';
+}
+
+function buildStandaloneComposeInsetBootstrapValue(win: any): string {
+  if (isIphoneStandaloneComposeDevice({ navigator: win?.navigator }) && isPortraitOrientation(win)) {
+    return `${IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX}px`;
   }
   return 'env(safe-area-inset-bottom, 0px)';
 }
@@ -263,7 +278,7 @@ export function installStandaloneMobileViewportFix(runtime = {}) {
   if (shouldUseIphoneStandaloneComposeInset({ window: win, navigator: win.navigator })) {
     doc.documentElement?.style?.setProperty?.(
       '--iphone-standalone-compose-safe-area-bottom',
-      'max(16px, env(safe-area-inset-bottom, 0px))',
+      buildStandaloneComposeInsetBootstrapValue(win),
     );
     doc.documentElement?.setAttribute?.('data-iphone-standalone-compose-inset', '1');
   }
