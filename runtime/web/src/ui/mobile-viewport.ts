@@ -5,11 +5,6 @@ export function shouldUseStandaloneMobileViewportFix(runtime = {}) {
   return isStandaloneWebAppMode(runtime) && isMobileBrowserMode(runtime);
 }
 
-function isIphoneStandaloneComposeDevice(runtime = {}): boolean {
-  const nav = runtime.navigator ?? (typeof navigator !== 'undefined' ? navigator : null);
-  return /iPhone/i.test(String(nav?.userAgent || ''));
-}
-
 function shouldUseIphoneStandaloneComposeInset(runtime = {}): boolean {
   if (!shouldUseStandaloneMobileViewportFix(runtime)) return false;
   const nav = runtime.navigator ?? (typeof navigator !== 'undefined' ? navigator : null);
@@ -38,16 +33,6 @@ function readIphoneStandaloneViewportCompensation(win: any, options: { keyboardA
   return gap;
 }
 
-const IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX = 16;
-
-function isPortraitOrientation(win: any): boolean {
-  const innerWidth = Number(win?.innerWidth || 0);
-  const innerHeight = Number(win?.innerHeight || 0);
-  if (!Number.isFinite(innerWidth) || !Number.isFinite(innerHeight) || innerWidth <= 0 || innerHeight <= 0) {
-    return true;
-  }
-  return innerHeight >= innerWidth;
-}
 
 function measureSafeAreaInset(doc: any, edge: 'top' | 'bottom'): number {
   if (!doc?.body || typeof doc.createElement !== 'function') return 0;
@@ -77,9 +62,6 @@ function measureSafeAreaInset(doc: any, edge: 'top' | 'bottom'): number {
 
 function readIphoneStandaloneBottomSafeArea(win: any, doc: any, options: { keyboardActive?: boolean } = {}): number {
   if (options.keyboardActive) return 0;
-  if (isIphoneStandaloneComposeDevice({ navigator: win?.navigator }) && isPortraitOrientation(win)) {
-    return IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX;
-  }
   const measuredBottom = measureSafeAreaInset(doc, 'bottom');
   if (measuredBottom > 0) return measuredBottom;
   return 0;
@@ -96,10 +78,7 @@ function buildIphoneStandaloneComposeInsetValue(win: any, doc: any, options: { k
   return 'env(safe-area-inset-bottom, 0px)';
 }
 
-function buildStandaloneComposeInsetBootstrapValue(win: any): string {
-  if (isIphoneStandaloneComposeDevice({ navigator: win?.navigator }) && isPortraitOrientation(win)) {
-    return `${IPHONE_PORTRAIT_SAFE_AREA_BOTTOM_FALLBACK_PX}px`;
-  }
+function buildStandaloneComposeInsetBootstrapValue(_win: any): string {
   return 'env(safe-area-inset-bottom, 0px)';
 }
 

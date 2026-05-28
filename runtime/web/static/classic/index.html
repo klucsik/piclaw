@@ -76,22 +76,17 @@
                 if (standalone) {
                     document.documentElement.style.setProperty('--app-height', '100vh');
                     var userAgent = navigator.userAgent || '';
-                    var isIphoneStandalone = /iPhone/i.test(userAgent);
                     var isAppleTouchStandalone = /iPhone|iPad|iPod/i.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
                     if (isAppleTouchStandalone) {
-                        var innerWidth = Number(window.innerWidth || screen.width || 0);
-                        var innerHeight = Number(window.innerHeight || screen.height || 0);
-                        var isPortrait = !innerWidth || !innerHeight ? true : innerHeight >= innerWidth;
-                        var insetValue = (isIphoneStandalone && isPortrait) ? '16px' : 'env(safe-area-inset-bottom, 0px)';
-                        document.documentElement.style.setProperty('--iphone-standalone-compose-safe-area-bottom', insetValue);
+                        document.documentElement.style.setProperty('--iphone-standalone-compose-safe-area-bottom', 'env(safe-area-inset-bottom, 0px)');
                         document.documentElement.setAttribute('data-iphone-standalone-compose-inset', '1');
                     }
                 }
             } catch(e) {}
         })();
     </script>
-    <link rel="stylesheet" href="/static/classic/dist/app.bundle.css?v=2f2152febcf7">
-    <link id="dynamic-manifest" rel="manifest" href="/manifest.json?v=2f2152febcf7">
+    <link rel="stylesheet" href="/static/classic/dist/app.bundle.css?v=c06245e46236">
+    <link id="dynamic-manifest" rel="manifest" href="/manifest.json?v=c06245e46236">
     <link id="dynamic-favicon" rel="icon" href="/favicon.ico">
     <link id="dynamic-apple-touch-icon" rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link id="dynamic-apple-touch-icon-180" rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
@@ -208,6 +203,6 @@
       }
     }
     </script>
-    <script type="module" src="/static/classic/dist/app.bundle.js?v=2f2152febcf7"></script>
+    <script type="module" src="/static/classic/dist/app.bundle.js?v=c06245e46236"></script>
 </body>
 </html>
