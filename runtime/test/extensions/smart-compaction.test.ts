@@ -112,10 +112,19 @@ function buildLargeConversation(messageCount: number) {
 // Mock setup
 // ---------------------------------------------------------------------------
 
-// Mock completeSimple before importing the module under test
-vi.mock("@earendil-works/pi-ai", () => ({
-  completeSimple: vi.fn(),
-}));
+// Mock completeSimple before importing the module under test. The implementation
+// now calls streamSimple().result(), so the stream mock delegates its result to
+// the same completeSimple mock to preserve existing assertions/captured prompts.
+vi.mock("@earendil-works/pi-ai", () => {
+  const completeSimple = vi.fn();
+  return {
+    completeSimple,
+    streamSimple: vi.fn((model: any, context: any, options: any) => ({
+      async *[Symbol.asyncIterator]() {},
+      result: () => completeSimple(model, context, options),
+    })),
+  };
+});
 
 // Mock convertToLlm with the upstream behaviors we care about in these tests.
 vi.mock("@earendil-works/pi-coding-agent", () => ({
