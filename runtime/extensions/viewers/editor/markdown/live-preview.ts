@@ -124,6 +124,69 @@ export function pushSafeReplace(
     }
 }
 
+function getReplaceDecorationSpec(decoration: Decoration): ReplaceDecorationSpec | null {
+    const value = decoration as unknown as { isReplace?: boolean; spec?: ReplaceDecorationSpec };
+    return value.isReplace ? (value.spec || {}) : null;
+}
+
+function pushSplitReplaceRanges(
+    ranges: Range<Decoration>[],
+    doc: LineAddressableDocument,
+    from: number,
+    to: number,
+    spec: ReplaceDecorationSpec,
+): void {
+    let firstSegment = true;
+    for (const range of splitRangeByDocumentLines(doc, from, to)) {
+        ranges.push(Decoration.replace(firstSegment ? spec : {}).range(range.from, range.to));
+        firstSegment = false;
+    }
+}
+
+function pushSafeDecorationRange(
+    ranges: Range<Decoration>[],
+    doc: LineAddressableDocument,
+    from: number,
+    to: number,
+    decoration: Decoration,
+): void {
+    if (from === to) {
+        ranges.push(decoration.range(from));
+        return;
+    }
+
+    const crossesLine = doc.lineAt(from).to < to;
+    const replaceSpec = getReplaceDecorationSpec(decoration);
+    if (replaceSpec && crossesLine) {
+        pushSplitReplaceRanges(ranges, doc, from, to, replaceSpec);
+    } else {
+        ranges.push(decoration.range(from, to));
+    }
+}
+
+function normalizeReplaceDecorationSet(decorations: DecorationSet, doc: LineAddressableDocument): DecorationSet {
+    const ranges: Range<Decoration>[] = [];
+    decorations.between(0, doc.length, (from, to, decoration) => {
+        pushSafeDecorationRange(ranges, doc, from, to, decoration);
+    });
+    return RangeSet.of(ranges, true);
+}
+
+function changesMayMoveReplaceAcrossLineBreak(update: ViewUpdate): boolean {
+    let mayCrossLine = false;
+    update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+        if (mayCrossLine) return;
+        if (inserted.toString().includes('\n')) {
+            mayCrossLine = true;
+            return;
+        }
+        if (fromA !== toA && update.startState.doc.sliceString(fromA, toA).includes('\n')) {
+            mayCrossLine = true;
+        }
+    });
+    return mayCrossLine;
+}
+
 // ── ViewPlugin ──────────────────────────────────────────────────
 
 export function getSelectionLineSignature(view: Pick<EditorView, 'state'>): string {
@@ -135,6 +198,21 @@ export function getSelectionLineSignature(view: Pick<EditorView, 'state'>): stri
             return `${doc.lineAt(anchor).from}:${doc.lineAt(head).from}`;
         })
         .join('|');
+}
+
+function lineTouchesVisibleRange(line: { from: number; to: number }, view: EditorView): boolean {
+    return view.visibleRanges.some((range) => line.from <= range.to && line.to >= range.from);
+}
+
+function selectionTouchesVisibleRange(view: EditorView, state: Pick<EditorView['state'], 'doc' | 'selection'>): boolean {
+    const doc = state.doc;
+    for (const range of state.selection.ranges) {
+        const anchor = Math.max(0, Math.min(range.anchor, doc.length));
+        const head = Math.max(0, Math.min(range.head, doc.length));
+        if (lineTouchesVisibleRange(doc.lineAt(anchor), view)) return true;
+        if (lineTouchesVisibleRange(doc.lineAt(head), view)) return true;
+    }
+    return false;
 }
 
 const LIVE_PREVIEW_DEBOUNCE_MS = 300;
@@ -216,6 +294,87 @@ class LivePreviewPointerFreezePlugin {
 
 export const livePreviewPointerFreeze = ViewPlugin.fromClass(LivePreviewPointerFreezePlugin);
 
+const MID_TYPING_DELIMITERS: readonly Array<{ delim: string; className: string }> = [
+    { delim: '**', className: 'cm-md-strong' },
+    { delim: '__', className: 'cm-md-strong' },
+    { delim: '~~', className: 'cm-md-strike' },
+    { delim: '*', className: 'cm-md-em' },
+    { delim: '_', className: 'cm-md-em' },
+];
+
+function indexOfUnconsumed(text: string, search: string, from: number, consumed: Uint8Array): number {
+    let index = text.indexOf(search, from);
+    while (index >= 0) {
+        let free = true;
+        for (let offset = 0; offset < search.length; offset++) {
+            if (consumed[index + offset]) {
+                free = false;
+                break;
+            }
+        }
+        if (free) return index;
+        index = text.indexOf(search, index + 1);
+    }
+    return -1;
+}
+
+export function findMidTypingEmphasisRanges(
+    text: string,
+    lineFrom: number,
+    localCursor: number,
+): Array<{ from: number; to: number; className: string }> {
+    const ranges: Array<{ from: number; to: number; className: string }> = [];
+    const consumed = new Uint8Array(text.length);
+
+    for (const { delim, className } of MID_TYPING_DELIMITERS) {
+        const delimLength = delim.length;
+        const isUnderscore = delim === '_' || delim === '__';
+        let searchFrom = 0;
+        while (searchFrom < text.length) {
+            const open = indexOfUnconsumed(text, delim, searchFrom, consumed);
+            if (open < 0) break;
+            if (isUnderscore && open > 0 && /\w/.test(text[open - 1])) {
+                searchFrom = open + delimLength;
+                continue;
+            }
+            const close = indexOfUnconsumed(text, delim, open + delimLength, consumed);
+            if (close < 0) break;
+            if (isUnderscore && close + delimLength < text.length && /\w/.test(text[close + delimLength])) {
+                searchFrom = close + delimLength;
+                continue;
+            }
+
+            for (let index = open; index < close + delimLength; index++) consumed[index] = 1;
+            const contentFrom = open + delimLength;
+            const contentTo = close;
+            if (contentFrom < contentTo && localCursor > open && localCursor < close + delimLength) {
+                ranges.push({
+                    from: lineFrom + contentFrom,
+                    to: lineFrom + contentTo,
+                    className,
+                });
+            }
+            searchFrom = close + delimLength;
+        }
+    }
+
+    return ranges;
+}
+
+function addMidTypingEmphasisEntries(entries: DecorationEntry[], view: EditorView): void {
+    if (!view.hasFocus) return;
+    const head = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(head);
+    const ranges = findMidTypingEmphasisRanges(line.text, line.from, head - line.from);
+    for (const range of ranges) {
+        entries.push({
+            from: range.from,
+            to: range.to,
+            decoration: Decoration.mark({ class: range.className }),
+        });
+    }
+}
+
 class LivePreviewPlugin {
     decorations: DecorationSet;
     private selectionLineSignature: string;
@@ -238,18 +397,32 @@ class LivePreviewPlugin {
         const frozen = update.state.field(livePreviewFrozenField, false);
         const freezeReleased = transactionHasFreezeEffect(update) && !frozen;
         const treeGrew = transactionHasTreeGrowthEffect(update);
+        const selectionIsCollapsed = update.state.selection.ranges.every((range) => range.empty);
+        const selectionTouchesViewport = update.selectionSet && (
+            selectionTouchesVisibleRange(update.view, update.startState) ||
+            selectionTouchesVisibleRange(update.view, update.state)
+        );
+        const viewportNowShowsSelection = update.viewportChanged && selectionTouchesVisibleRange(update.view, update.state);
 
         const needsRebuild =
             update.docChanged ||
-            update.viewportChanged ||
             treeGrew ||
             freezeReleased ||
-            (update.selectionSet && selectionLineChanged && !frozen);
+            (!frozen && (
+                (update.selectionSet && selectionIsCollapsed && selectionLineChanged && selectionTouchesViewport) ||
+                viewportNowShowsSelection
+            ));
 
         if (!needsRebuild) return;
 
         if (update.docChanged) {
-            // During typing: debounce the expensive rebuild.
+            // During typing: keep existing decorations positionally valid while
+            // debouncing the expensive full rebuild. Returning stale ranges after
+            // an insertion can make an old replace span a new line break.
+            const mappedDecorations = this.decorations.map(update.changes);
+            this.decorations = changesMayMoveReplaceAcrossLineBreak(update)
+                ? normalizeReplaceDecorationSet(mappedDecorations, update.state.doc)
+                : mappedDecorations;
             if (this.rebuildTimer !== null) clearTimeout(this.rebuildTimer);
             this.rebuildTimer = setTimeout(() => {
                 this.rebuildTimer = null;
@@ -278,11 +451,10 @@ class LivePreviewPlugin {
         const cursorHead = view.state.selection.main.head;
         const cursorLine = doc.lineAt(cursorHead);
 
-        for (const { from, to } of view.visibleRanges) {
-            tree.iterate({
-                from,
-                to,
-                enter(node) {
+        tree.iterate({
+            from: 0,
+            to: doc.length,
+            enter(node) {
                     const nodeTypeName = node.type.name;
                     const decorator = decorators.get(nodeTypeName);
                     if (!decorator) return;
@@ -325,10 +497,11 @@ class LivePreviewPlugin {
                                 decoration: Decoration.line({ class: 'cm-md-code-raw-line' }),
                             });
                         }
-                    }
-                },
-            });
-        }
+                }
+            },
+        });
+
+        addMidTypingEmphasisEntries(entries, view);
 
         // Convert entries to Range<Decoration> and use RangeSet.of()
         // which handles sorting automatically (unlike RangeSetBuilder).
@@ -336,12 +509,7 @@ class LivePreviewPlugin {
         for (const entry of entries) {
             if (entry.from > entry.to) continue; // skip invalid (but allow point decos: from === to)
             try {
-                if (entry.from === entry.to) {
-                    // Point decoration (e.g. Decoration.line())
-                    ranges.push(entry.decoration.range(entry.from));
-                } else {
-                    ranges.push(entry.decoration.range(entry.from, entry.to));
-                }
+                pushSafeDecorationRange(ranges, doc, entry.from, entry.to, entry.decoration);
             } catch (error) {
                 console.warn('[editor/live-preview] skipped invalid decoration range', {
                     from: entry.from,

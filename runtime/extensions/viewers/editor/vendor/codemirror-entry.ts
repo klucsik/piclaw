@@ -1,4 +1,4 @@
-import { EditorState, StateEffect, StateField } from "@codemirror/state";
+import { EditorSelection, EditorState, StateEffect, StateField } from "@codemirror/state";
 import {
   EditorView,
   keymap,
@@ -17,7 +17,7 @@ import {
 import { history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { defaultHighlightStyle, StreamLanguage, HighlightStyle, syntaxHighlighting, syntaxTree, ensureSyntaxTree, indentOnInput, indentUnit } from "@codemirror/language";
 
-export { EditorState, Compartment, RangeSetBuilder, RangeSet, Prec, StateEffect, StateField } from "@codemirror/state";
+export { EditorSelection, EditorState, Compartment, RangeSetBuilder, RangeSet, Prec, StateEffect, StateField } from "@codemirror/state";
 export type { Extension, Range, Transaction } from "@codemirror/state";
 export {
   EditorView,

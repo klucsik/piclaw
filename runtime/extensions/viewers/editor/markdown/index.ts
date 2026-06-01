@@ -28,6 +28,7 @@ import './tag.js';
 import { livePreviewFrozenField, livePreviewPlugin, livePreviewPointerFreeze } from './live-preview.js';
 import { markdownPreviewTheme } from './theme.js';
 import { livePreviewCursorNav } from './cursor-nav.js';
+import { autoCloseCodeFence, extendEmphasisPair, tightListEnterKeymap } from './edit-helpers.js';
 import { imageBlocks } from './image-block.js';
 import { livePreviewTableKeymap } from './table-keymap.js';
 
@@ -66,5 +67,8 @@ export const markdownLivePreview: Extension = [
 
     livePreviewCursorNav,
     livePreviewTableKeymap,
+    extendEmphasisPair,
+    autoCloseCodeFence,
+    tightListEnterKeymap,
     markdownPreviewTheme,
 ];

@@ -4,17 +4,23 @@
  */
 
 import { expect, test } from "bun:test";
-import { EditorState } from "#editor-vendor/codemirror";
+import { EditorState, markdown, markdownLanguage } from "#editor-vendor/codemirror";
 import {
   isAlwaysDecoratedNode,
   usesBlockCursorGate,
 } from "../../extensions/viewers/editor/markdown/cursor-gating.ts";
 import { shouldDecorateBlockquote } from "../../extensions/viewers/editor/markdown/blockquote-utils.ts";
+import {
+  autoCloseCodeFenceInput,
+  insertTightListItem,
+  isInsideFencedCodeBeforeLine,
+} from "../../extensions/viewers/editor/markdown/edit-helpers.ts";
 import { parseMarkdownImageSource } from "../../extensions/viewers/editor/markdown/image-block.ts";
 import { normalizeLinkHref } from "../../extensions/viewers/editor/markdown/link.ts";
 import { isTableBoundaryPosition } from "../../extensions/viewers/editor/markdown/table-keymap.ts";
 import { shouldSignalTreeGrowth } from "../../extensions/viewers/editor/markdown/tree-progress.ts";
 import {
+  findMidTypingEmphasisRanges,
   getSelectionLineSignature,
   livePreviewFrozenField,
   pushSafeReplace,
@@ -145,4 +151,62 @@ test("table boundary helper treats the table as an atomic unit before destructiv
   expect(isTableBoundaryPosition(42, 42)).toBe(true);
   expect(isTableBoundaryPosition(42, 43)).toBe(true);
   expect(isTableBoundaryPosition(42, 44)).toBe(false);
+});
+
+test("code fence auto-close inserts a closing fence outside existing fences", () => {
+  const dispatches: unknown[] = [];
+  const view = {
+    state: EditorState.create({ doc: "``" }),
+    dispatch(value: unknown) { dispatches.push(value); },
+  } as any;
+
+  expect(autoCloseCodeFenceInput(view, 2, 2, "`")).toBe(true);
+  expect(dispatches).toEqual([{
+    changes: { from: 2, to: 2, insert: "`\n```" },
+    selection: { anchor: 3 },
+  }]);
+});
+
+test("code fence auto-close detects existing fenced-code context", () => {
+  expect(isInsideFencedCodeBeforeLine("```ts\nbody", 2)).toBe(true);
+  expect(isInsideFencedCodeBeforeLine("```ts\nbody\n```\n", 4)).toBe(false);
+});
+
+test("tight list Enter continues task lists without preserving checked state", () => {
+  const state = EditorState.create({
+    doc: "- [x] done",
+    extensions: [markdown({ base: markdownLanguage })],
+  });
+  const dispatches: any[] = [];
+  const view = {
+    state: state.update({ selection: { anchor: state.doc.length } }).state,
+    dispatch(value: unknown) { dispatches.push(value); },
+  } as any;
+
+  expect(insertTightListItem(view)).toBe(true);
+  expect(dispatches[0].changes).toEqual({ from: state.doc.length, to: state.doc.length, insert: "\n- [ ] " });
+});
+
+test("tight list Enter exits empty top-level list items", () => {
+  const state = EditorState.create({
+    doc: "- ",
+    extensions: [markdown({ base: markdownLanguage })],
+  });
+  const dispatches: any[] = [];
+  const view = {
+    state: state.update({ selection: { anchor: state.doc.length } }).state,
+    dispatch(value: unknown) { dispatches.push(value); },
+  } as any;
+
+  expect(insertTightListItem(view)).toBe(true);
+  expect(dispatches[0].changes).toEqual({ from: 0, to: 2, insert: "" });
+});
+
+test("mid-typing emphasis supplement styles active-line markdown before parser catches up", () => {
+  expect(findMidTypingEmphasisRanges("before **bold** after", 10, 10)).toEqual([
+    { from: 19, to: 23, className: "cm-md-strong" },
+  ]);
+  expect(findMidTypingEmphasisRanges("*em* and ~~gone~~", 0, 2)).toEqual([
+    { from: 1, to: 3, className: "cm-md-em" },
+  ]);
 });
