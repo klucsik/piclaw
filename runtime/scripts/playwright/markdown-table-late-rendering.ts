@@ -143,10 +143,28 @@ try {
     const rawPipeLines = Array.from(document.querySelectorAll('.cm-line'))
       .map((line) => line.textContent || '')
       .filter((text) => text.includes('| Metric |') || text.includes('| State |') || text.includes('| syscr/syscw delta |'));
+    const metricSource = Array.from(document.querySelectorAll<HTMLElement>('.cm-md-table-cell-source'))
+      .find((element) => (element.textContent || '').includes('**0**'));
+    if (metricSource) {
+      const strongWrap = metricSource.querySelector<HTMLElement>('.cm-md-table-cell-strong-wrap');
+      const text = strongWrap?.querySelector<HTMLElement>('.cm-md-table-cell-strong')?.firstChild;
+      if (text) {
+        const range = document.createRange();
+        range.setStart(text, 1);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        metricSource.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'ArrowRight' }));
+      }
+    }
     const markdownClassCounts = {
+      source: document.querySelectorAll('.cm-md-table-cell-source').length,
       strong: document.querySelectorAll('.cm-md-table-cell-strong').length,
       code: document.querySelectorAll('.cm-md-table-cell-code').length,
       link: document.querySelectorAll('.cm-md-table-cell-link').length,
+      linkIcon: document.querySelectorAll('.cm-md-table-cell-link-icon').length,
+      activeMarkWrap: document.querySelectorAll('.cm-md-table-cell-strong-wrap.active, .cm-md-table-cell-em-wrap.active, .cm-md-table-cell-strike-wrap.active, .cm-md-table-cell-link-wrap.active').length,
     };
 
     return {
@@ -169,8 +187,13 @@ try {
   if (result.rawPipeLines.length > 0) {
     throw new Error(`late table rendered as raw pipe markup: ${JSON.stringify(result.rawPipeLines)}`);
   }
-  if (result.markdownClassCounts.strong < 1 || result.markdownClassCounts.code < 1 || result.markdownClassCounts.link < 1) {
-    throw new Error(`table cell markdown did not render expected inline classes: ${JSON.stringify(result.markdownClassCounts)}`);
+  if (result.markdownClassCounts.source < 1
+      || result.markdownClassCounts.strong < 1
+      || result.markdownClassCounts.code < 1
+      || result.markdownClassCounts.link < 1
+      || result.markdownClassCounts.linkIcon < 1
+      || result.markdownClassCounts.activeMarkWrap < 1) {
+    throw new Error(`table cell markdown did not render expected Atomic-style structure/classes: ${JSON.stringify(result.markdownClassCounts)}`);
   }
 
   console.log(`late table rendering ok: parserTables=${result.parserTables.length}, visibleWidgets=${result.widgets.length}, markdown=${JSON.stringify(result.markdownClassCounts)}`);

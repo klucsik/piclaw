@@ -223,15 +223,15 @@ async function runScenario(page: Page, baseUrl: string, scenario: typeof scenari
       cell.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
     };
 
-    const cell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="0"]');
-    if (!cell) throw new Error('editable table body cell not found');
+    const cell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="0"] .cm-md-table-cell-source');
+    if (!cell) throw new Error('editable table body cell source not found');
 
     cell.focus();
     cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     await wait();
     const tabCol = (document.activeElement as HTMLElement | null)?.dataset?.col ?? null;
-    const secondCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="1"]');
-    if (!secondCell) throw new Error('editable table second cell not found');
+    const secondCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="1"] .cm-md-table-cell-source');
+    if (!secondCell) throw new Error('editable table second cell source not found');
     secondCell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
     await wait();
     const shiftTabCol = (document.activeElement as HTMLElement | null)?.dataset?.col ?? null;
@@ -243,8 +243,8 @@ async function runScenario(page: Page, baseUrl: string, scenario: typeof scenari
     const caretAfterMiddleInsert = caretOffset(cell);
     const caretDoc = harness.doc();
 
-    const pipeCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="1"]');
-    if (!pipeCell) throw new Error('editable table pipe cell not found');
+    const pipeCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="1"] .cm-md-table-cell-source');
+    if (!pipeCell) throw new Error('editable table pipe cell source not found');
     pipeCell.textContent = 'pipe value';
     setCaret(pipeCell, 4);
     insertAtCaret(pipeCell, ' |');
@@ -261,8 +261,8 @@ async function runScenario(page: Page, baseUrl: string, scenario: typeof scenari
     const pasteCaret = caretOffset(pipeCell);
     const pasteDoc = harness.doc();
 
-    const compositionCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="2"]');
-    if (!compositionCell) throw new Error('editable table composition cell not found');
+    const compositionCell = document.querySelector<HTMLElement>('.cm-md-editable-table tbody td[data-row="1"][data-col="2"] .cm-md-table-cell-source');
+    if (!compositionCell) throw new Error('editable table composition cell source not found');
     compositionCell.textContent = '';
     compositionCell.focus();
     compositionCell.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
@@ -302,10 +302,10 @@ async function runScenario(page: Page, baseUrl: string, scenario: typeof scenari
     deleteCol.click();
     await wait();
     const afterDeleteColDoc = harness.doc();
-    const activeCellAfterMutation = (document.activeElement as HTMLElement | null)?.classList.contains('cm-md-editable-table-cell') ?? false;
+    const activeCellAfterMutation = (document.activeElement as HTMLElement | null)?.classList.contains('cm-md-table-cell-source') ?? false;
 
-    const lastCell = Array.from(document.querySelectorAll<HTMLElement>('.cm-md-editable-table tbody td[data-row][data-col]')).at(-1);
-    if (!lastCell) throw new Error('editable table last cell not found');
+    const lastCell = Array.from(document.querySelectorAll<HTMLElement>('.cm-md-editable-table tbody td[data-row][data-col] .cm-md-table-cell-source')).at(-1);
+    if (!lastCell) throw new Error('editable table last cell source not found');
     const beforeTabEndRows = tableLineCount(harness.doc());
     lastCell.focus();
     lastCell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));

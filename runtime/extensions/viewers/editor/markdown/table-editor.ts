@@ -178,11 +178,11 @@ function modelShape(model: EditableTableModel): string {
 
 let pendingTableFocus: { from: number; row: number; col: number } | null = null;
 
-function insertPlainTextIntoCell(cell: HTMLElement, text: string): void {
-    const doc = cell.ownerDocument;
+function insertPlainTextIntoCell(source: HTMLElement, text: string): void {
+    const doc = source.ownerDocument;
     const selection = doc.getSelection();
-    if (!selection || selection.rangeCount === 0 || !cell.contains(selection.anchorNode)) {
-        cell.textContent = `${cell.textContent ?? ''}${text}`;
+    if (!selection || selection.rangeCount === 0 || !source.contains(selection.anchorNode)) {
+        source.textContent = `${source.textContent ?? ''}${text}`;
         return;
     }
     const range = selection.getRangeAt(0);
@@ -323,13 +323,90 @@ function renderTableCellToken(token: TableCellInlineToken, doc: Document): Node 
     urlMark.classList.add('cm-md-table-cell-link-url');
     wrap.appendChild(urlMark);
     wrap.appendChild(markSpan(doc, ')'));
+    if (href) {
+        const icon = doc.createElement('span');
+        icon.className = 'cm-md-table-cell-link-icon';
+        icon.contentEditable = 'false';
+        icon.setAttribute('aria-hidden', 'true');
+        wrap.appendChild(icon);
+    }
     return wrap;
 }
 
-function renderDecoratedTableCell(cell: HTMLElement, raw: string): void {
-    cell.dataset.raw = raw;
-    cell.replaceChildren();
-    appendTableCellTokens(cell, parseTableCellInlineMarkdown(raw), cell.ownerDocument);
+function renderCellSourceDecorated(source: HTMLElement): void {
+    const raw = source.parentElement?.dataset.raw ?? '';
+    source.replaceChildren();
+    appendTableCellTokens(source, parseTableCellInlineMarkdown(raw), source.ownerDocument);
+}
+
+function getCaretCharOffset(container: HTMLElement): number | null {
+    const selection = container.ownerDocument.defaultView?.getSelection();
+    if (!selection || selection.rangeCount === 0 || !container.contains(selection.anchorNode)) return null;
+    const range = selection.getRangeAt(0).cloneRange();
+    range.selectNodeContents(container);
+    range.setEnd(selection.anchorNode!, selection.anchorOffset);
+    return range.toString().length;
+}
+
+function setCaretCharOffset(container: HTMLElement, offset: number): void {
+    const doc = container.ownerDocument;
+    const selection = doc.defaultView?.getSelection();
+    if (!selection) return;
+    let remaining = Math.max(0, offset);
+    const walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode() as Text | null;
+    while (textNode) {
+        const length = textNode.textContent?.length ?? 0;
+        if (remaining <= length) {
+            const range = doc.createRange();
+            range.setStart(textNode, remaining);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return;
+        }
+        remaining -= length;
+        textNode = walker.nextNode() as Text | null;
+    }
+    const range = doc.createRange();
+    range.selectNodeContents(container);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+function clearActiveMarksInSource(source: HTMLElement): void {
+    source.querySelectorAll('.cm-md-table-cell-strong-wrap.active, .cm-md-table-cell-em-wrap.active, .cm-md-table-cell-strike-wrap.active, .cm-md-table-cell-link-wrap.active')
+        .forEach((element) => element.classList.remove('active'));
+}
+
+function updateActiveMarkForSource(source: HTMLElement): void {
+    clearActiveMarksInSource(source);
+    const selection = source.ownerDocument.defaultView?.getSelection();
+    if (!selection || !selection.anchorNode || !source.contains(selection.anchorNode)) return;
+    let current: Element | null = selection.anchorNode instanceof Element
+        ? selection.anchorNode
+        : selection.anchorNode.parentElement;
+    while (current && current !== source) {
+        if (current.classList.contains('cm-md-table-cell-strong-wrap')
+            || current.classList.contains('cm-md-table-cell-em-wrap')
+            || current.classList.contains('cm-md-table-cell-strike-wrap')
+            || current.classList.contains('cm-md-table-cell-link-wrap')) {
+            current.classList.add('active');
+        }
+        current = current.parentElement;
+    }
+}
+
+function commitDecoratedCellSource(source: HTMLElement, commit: () => void): void {
+    const cell = source.parentElement;
+    if (!cell) return;
+    cell.dataset.raw = source.textContent ?? '';
+    const offset = getCaretCharOffset(source);
+    renderCellSourceDecorated(source);
+    if (offset !== null) setCaretCharOffset(source, offset);
+    updateActiveMarkForSource(source);
+    commit();
 }
 
 class EditableTableWidget extends WidgetType {
@@ -372,16 +449,10 @@ class EditableTableWidget extends WidgetType {
         let activeCol = 0;
 
         const focusCell = (row: number, col: number) => {
-            const next = table.querySelector<HTMLElement>(`[data-row="${row}"][data-col="${col}"]`);
+            const next = table.querySelector<HTMLElement>(`.cm-md-table-cell-source[data-row="${row}"][data-col="${col}"]`);
             if (!next) return;
             next.focus();
-            const selection = window.getSelection();
-            if (!selection) return;
-            const range = document.createRange();
-            range.selectNodeContents(next);
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
+            setCaretCharOffset(next, next.textContent?.length ?? 0);
         };
 
         const commitModel = (nextModel: EditableTableModel, focus?: { row: number; col: number }) => {
@@ -471,17 +542,36 @@ class EditableTableWidget extends WidgetType {
             const cell = document.createElement(tag);
             const align = this.model.alignments[col] || 'left';
             cell.className = `cm-md-editable-table-cell cm-md-editable-table-cell-${align}`;
-            cell.contentEditable = 'true';
-            cell.spellcheck = false;
-            renderDecoratedTableCell(cell, text);
+            cell.contentEditable = 'false';
+            cell.dataset.raw = text;
             cell.dataset.row = String(row);
             cell.dataset.col = String(col);
+
+            const source = document.createElement('div');
+            source.className = 'cm-md-table-cell-source';
+            source.contentEditable = 'true';
+            source.spellcheck = false;
+            source.dataset.row = String(row);
+            source.dataset.col = String(col);
+            cell.appendChild(source);
+            renderCellSourceDecorated(source);
+
             const markActive = () => {
                 activeRow = Number(cell.dataset.row || '0');
                 activeCol = Number(cell.dataset.col || '0');
             };
-            cell.addEventListener('focus', markActive);
-            cell.addEventListener('mousedown', markActive);
+            const commitSource = () => commitDecoratedCellSource(source, commitFromDom);
+            const linkIconFromEvent = (event: Event): HTMLElement | null => {
+                const target = event.target;
+                if (!(target instanceof Element)) return null;
+                return target.closest<HTMLElement>('.cm-md-table-cell-link-icon');
+            };
+
+            cell.addEventListener('mousedown', (event) => {
+                markActive();
+                if (event.button !== 0 || linkIconFromEvent(event)) return;
+                if (event.target === cell) requestAnimationFrame(() => focusCell(activeRow, activeCol));
+            });
             cell.addEventListener('contextmenu', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -491,37 +581,52 @@ class EditableTableWidget extends WidgetType {
                 contextMenu.style.top = `${Math.max(0, event.clientY - rect.top)}px`;
                 contextMenu.hidden = false;
             });
-            cell.addEventListener('compositionstart', () => { this.composing = true; });
-            const syncRawFromDom = () => { cell.dataset.raw = cell.textContent ?? ''; };
-            cell.addEventListener('compositionend', () => { this.composing = false; syncRawFromDom(); commitFromDom(); });
-            cell.addEventListener('input', () => { syncRawFromDom(); commitFromDom(); });
-            cell.addEventListener('paste', (event) => {
-                event.preventDefault();
-                const text = event.clipboardData?.getData('text/plain') ?? '';
-                insertPlainTextIntoCell(cell, text.replace(/\r?\n/g, ' '));
-                syncRawFromDom();
-                commitFromDom();
+
+            source.addEventListener('focus', () => { markActive(); updateActiveMarkForSource(source); });
+            source.addEventListener('mouseup', () => updateActiveMarkForSource(source));
+            source.addEventListener('keyup', () => updateActiveMarkForSource(source));
+            source.addEventListener('blur', () => clearActiveMarksInSource(source));
+            source.addEventListener('compositionstart', () => { this.composing = true; });
+            source.addEventListener('compositionend', () => { this.composing = false; commitSource(); });
+            source.addEventListener('input', (event) => {
+                if (this.composing || (event as InputEvent).isComposing) return;
+                commitSource();
             });
-            cell.addEventListener('keydown', (event) => {
-                if (event.key === 'Tab') {
+            source.addEventListener('paste', (event) => {
+                event.preventDefault();
+                const pasted = event.clipboardData?.getData('text/plain') ?? '';
+                insertPlainTextIntoCell(source, pasted.replace(/\s+/g, ' ').trim());
+                commitSource();
+            });
+            source.addEventListener('pointerdown', (event) => {
+                if (event.button !== 0) return;
+                if (linkIconFromEvent(event)) event.preventDefault();
+            });
+            source.addEventListener('click', (event) => {
+                const icon = linkIconFromEvent(event);
+                if (!icon) return;
+                const href = icon.closest<HTMLElement>('.cm-md-table-cell-link-wrap')?.dataset.href;
+                if (!href) return;
+                event.preventDefault();
+                event.stopPropagation();
+                window.open(href, '_blank', 'noopener,noreferrer');
+            });
+            source.addEventListener('keydown', (event) => {
+                if (event.key === 'Tab' || event.key === 'Enter') {
                     event.preventDefault();
                     event.stopPropagation();
-                    const cells = Array.from(table.querySelectorAll<HTMLElement>('[data-row][data-col]'));
-                    const index = cells.indexOf(cell);
+                    const cells = Array.from(table.querySelectorAll<HTMLElement>('.cm-md-table-cell-source[data-row][data-col]'));
+                    const index = cells.indexOf(source);
                     const nextIndex = event.shiftKey ? index - 1 : index + 1;
                     const next = cells[nextIndex];
                     if (next) {
                         next.focus();
+                        setCaretCharOffset(next, next.textContent?.length ?? 0);
                     } else if (!event.shiftKey) {
                         const nextModel = readModelFromTable(table, this.model.alignments);
                         const nextBodyRow = nextModel.rows.length;
                         mutate(insertTableRow(nextModel, nextModel.rows.length - 1), nextBodyRow + 1, 0);
                     }
-                    return;
-                }
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    event.stopPropagation();
                 }
             });
             return cell;

@@ -605,14 +605,19 @@ export const markdownPreviewTheme = EditorView.theme({
         textAlign: 'right',
         fontVariantNumeric: 'tabular-nums',
     },
-    '.cm-md-editable-table-cell:focus': {
+    '.cm-md-editable-table-cell:focus-within': {
         boxShadow: 'inset 0 0 0 2px var(--accent-color, #1d9bf0)',
         backgroundColor: 'rgba(29, 155, 240, 0.12) !important',
     },
-    '.cm-md-editable-table-cell .cm-md-table-cell-mark': {
+    '.cm-md-table-cell-source': {
+        minHeight: '1.2em',
+        outline: 'none',
+        whiteSpace: 'pre-wrap',
+    },
+    '.cm-md-table-cell-source .cm-md-table-cell-mark': {
         display: 'none',
     },
-    '.cm-md-editable-table-cell:focus .cm-md-table-cell-mark': {
+    '.cm-md-table-cell-source .cm-md-table-cell-strong-wrap.active > .cm-md-table-cell-mark, .cm-md-table-cell-source .cm-md-table-cell-em-wrap.active > .cm-md-table-cell-mark, .cm-md-table-cell-source .cm-md-table-cell-strike-wrap.active > .cm-md-table-cell-mark, .cm-md-table-cell-source .cm-md-table-cell-link-wrap.active > .cm-md-table-cell-mark': {
         display: 'inline',
         color: 'var(--text-muted, #6b7280)',
         opacity: '0.78',
@@ -638,9 +643,25 @@ export const markdownPreviewTheme = EditorView.theme({
         textDecoration: 'underline',
         textDecorationColor: 'var(--accent-soft, rgba(29,155,240,0.3))',
     },
-    '.cm-md-editable-table-cell:focus .cm-md-table-cell-link-url': {
+    '.cm-md-table-cell-source .cm-md-table-cell-link-wrap.active > .cm-md-table-cell-link-url': {
         fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)',
         fontSize: '0.88em',
+    },
+    '.cm-md-table-cell-link-icon': {
+        display: 'inline-block',
+        width: '0.78em',
+        height: '0.78em',
+        marginLeft: '0.18em',
+        verticalAlign: '0.02em',
+        backgroundColor: 'currentColor',
+        opacity: '0.72',
+        cursor: 'pointer',
+        userSelect: 'none',
+        WebkitMask: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath fill=\'black\' d=\'M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3ZM5 5h6v2H7v10h10v-4h2v6H5V5Z\'/%3E%3C/svg%3E") center / contain no-repeat',
+        mask: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath fill=\'black\' d=\'M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3ZM5 5h6v2H7v10h10v-4h2v6H5V5Z\'/%3E%3C/svg%3E") center / contain no-repeat',
+    },
+    '.cm-md-table-cell-link-icon:hover': {
+        opacity: '1',
     },
 
     /* ── Links ── */
