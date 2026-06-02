@@ -679,10 +679,15 @@ async function runPromptAttempt(
   const toolUseMessageBudget = getToolUseMessageBudget();
   const toolUseSoftStopThreshold = resolveToolBudgetSoftStopThreshold(toolUseMessageBudget);
   let toolUseSoftStopRequested = false;
+  let toolUseSoftStopApplied = false;
   let softStopSavedToolNames: string[] | null = null;
-  const requestToolBudgetSoftStop = () => {
-    if (toolUseSoftStopRequested || assistantToolUseMessageCount < toolUseSoftStopThreshold) return;
-    toolUseSoftStopRequested = true;
+  const pendingSoftStopToolCallIds = new Set<string>();
+  let pendingSoftStopAnonymousToolCallCount = 0;
+  let hadToolFailureBeforeSoftStop = false;
+  let hadToolFailureAfterSoftStop = false;
+  const applyToolBudgetSoftStop = () => {
+    if (toolUseSoftStopApplied) return;
+    toolUseSoftStopApplied = true;
     const toolControl = session as unknown as {
       getActiveToolNames?: () => string[];
       setActiveToolsByName?: (toolNames: string[]) => void;
@@ -708,6 +713,29 @@ async function runPromptAttempt(
         ...getRunObservabilityDetails(runOptions),
       });
     }
+  };
+  const maybeApplyPendingToolBudgetSoftStop = () => {
+    if (!toolUseSoftStopRequested) return;
+    if (pendingSoftStopToolCallIds.size > 0 || pendingSoftStopAnonymousToolCallCount > 0) return;
+    applyToolBudgetSoftStop();
+  };
+  const requestToolBudgetSoftStop = (toolCallBlocks: Array<Record<string, unknown>>) => {
+    if (toolUseSoftStopRequested || assistantToolUseMessageCount < toolUseSoftStopThreshold) return;
+    toolUseSoftStopRequested = true;
+    for (const block of toolCallBlocks) {
+      const id = typeof block.id === "string" && block.id.trim() ? block.id : null;
+      if (id) {
+        pendingSoftStopToolCallIds.add(id);
+      } else {
+        pendingSoftStopAnonymousToolCallCount += 1;
+      }
+    }
+    // The message_end event for an assistant tool-use message is emitted
+    // before the SDK dispatches that message's tool calls. Do not remove
+    // tools from the local dispatcher yet: doing so makes the just-generated
+    // call fail as "Tool <name> not found". Wait until those calls end, then
+    // stop advertising tools for the next model response so it can finalize.
+    maybeApplyPendingToolBudgetSoftStop();
   };
   const restoreToolBudgetSoftStop = () => {
     if (!softStopSavedToolNames) return;
@@ -963,6 +991,11 @@ async function runPromptAttempt(
       // Track failed tool executions so recovery can make smarter decisions.
       if (event.type === "tool_execution_end" && (event as { isError?: unknown }).isError) {
         hadToolFailure = true;
+        if (toolUseSoftStopApplied) {
+          hadToolFailureAfterSoftStop = true;
+        } else {
+          hadToolFailureBeforeSoftStop = true;
+        }
         if (!failedToolName && typeof toolName === "string") {
           failedToolName = toolName;
         }
@@ -971,6 +1004,13 @@ async function runPromptAttempt(
         sawTerminalSideEffectToolActivity = true;
       }
       if (event.type === "tool_execution_end") {
+        const toolCallId = (event as { toolCallId?: unknown }).toolCallId;
+        if (typeof toolCallId === "string" && pendingSoftStopToolCallIds.delete(toolCallId)) {
+          // matched the threshold-crossing tool-use message
+        } else if (pendingSoftStopAnonymousToolCallCount > 0) {
+          pendingSoftStopAnonymousToolCallCount -= 1;
+        }
+        maybeApplyPendingToolBudgetSoftStop();
         checkMidTurnContextAfterToolResult(toolName, (event as { isError?: unknown }).isError);
       }
       // If exit_process was called, do NOT abort immediately — let the LLM
@@ -1013,7 +1053,10 @@ async function runPromptAttempt(
         activeModelResponse = null;
       }
       if (message?.role === "assistant" && Array.isArray(message.content)) {
-        const hasToolCall = message.content.some((block) => block && typeof block === "object" && (block as { type?: unknown }).type === "toolCall");
+        const toolCallBlocks = message.content.filter((block): block is Record<string, unknown> => (
+          Boolean(block) && typeof block === "object" && (block as { type?: unknown }).type === "toolCall"
+        ));
+        const hasToolCall = toolCallBlocks.length > 0;
         sawAssistantToolCallMessage = sawAssistantToolCallMessage || hasToolCall;
         if (hasToolCall && message.stopReason === "toolUse") {
           assistantToolUseMessageCount += 1;
@@ -1030,7 +1073,7 @@ async function runPromptAttempt(
               });
             });
           }
-          requestToolBudgetSoftStop();
+          requestToolBudgetSoftStop(toolCallBlocks);
           if (!toolUseBudgetExceeded && assistantToolUseMessageCount > toolUseMessageBudget) {
             toolUseBudgetExceeded = true;
             void session.abort().catch((err) => {
@@ -1222,7 +1265,7 @@ async function runPromptAttempt(
           && detail.includes("provider stopped after tool use");
         const isDraftBackedToolCompletion = hadToolActivity
           && hadPartialOutput
-          && !hadToolFailure
+          && (!hadToolFailure || (!hadToolFailureBeforeSoftStop && hadToolFailureAfterSoftStop && toolUseSoftStopApplied))
           && !isBlankTurnSessionDelta(blankTurnDelta)
           && detail.includes("provider stopped after tool use");
         const isToolOnlyCompletion = isTerminalSideEffectCompletion || isRecoverableToolOnlyStop || isDraftBackedToolCompletion;
