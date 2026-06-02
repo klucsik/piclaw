@@ -95,6 +95,17 @@ const DEFAULT_RECOVERY_LOOP_GUARD_MAX_FAILURES = 3;
 const DEFAULT_RECOVERY_LOOP_GUARD_WINDOW_MS = 10 * 60 * 1000;
 const MAX_RECOVERY_LOOP_GUARD_CHATS = 512;
 
+/**
+ * Hard ceiling on tool executions within a single prompt attempt before
+ * forcing an abort for compaction.  Acts as last-resort safety net when
+ * the token estimator underestimates mid-turn context growth from large
+ * tool results (e.g. many file reads).
+ */
+const MID_TURN_TOOL_EXECUTION_HARD_CEILING = 48;
+
+/** Approximate bytes-per-token ratio for projecting tool-result size onto context tokens. */
+const TOOL_RESULT_BYTES_PER_TOKEN = 4;
+
 type RecoveryFailureSignatureRecord = {
   atMs: number;
   signature: string;
@@ -669,6 +680,7 @@ async function runPromptAttempt(
   let failedToolName: string | null = null;
   let assistantToolUseMessageCount = 0;
   let toolExecutionCount = 0;
+  let midTurnToolResultAccumulatedBytes = 0;
   let toolUseBudgetExceeded = false;
   let modelResponseSequence = 0;
   let activeModelResponse: { sequence: number; startedAt: number } | null = null;
@@ -832,24 +844,67 @@ async function runPromptAttempt(
 
   const checkMidTurnContextAfterToolResult = (toolName: unknown, isError: unknown): void => {
     try {
+      if (midTurnContextAbortRequested) return;
+
+      // Hard ceiling: if we've executed too many tool calls this turn, the token
+      // estimator is likely stale and we should abort for compaction regardless.
+      if (toolExecutionCount >= MID_TURN_TOOL_EXECUTION_HARD_CEILING) {
+        sawCompactionIntent = true;
+        midTurnContextAbortRequested = true;
+        options.onWarn?.("Mid-turn tool execution hard ceiling reached; aborting for compaction", {
+          operation: "run_agent.mid_turn_tool_ceiling",
+          chatJid,
+          toolExecutionCount,
+          ceiling: MID_TURN_TOOL_EXECUTION_HARD_CEILING,
+          midTurnToolResultAccumulatedBytes,
+          projectedAdditionalTokens: Math.ceil(midTurnToolResultAccumulatedBytes / TOOL_RESULT_BYTES_PER_TOKEN),
+          toolName: typeof toolName === "string" ? toolName : null,
+          ...getRunObservabilityDetails(runOptions),
+        });
+        void session.abort().catch((err) => {
+          options.onWarn?.("Failed to abort session after mid-turn tool ceiling", {
+            operation: "run_agent.mid_turn_tool_ceiling_abort_failed",
+            chatJid,
+            err,
+            ...getRunObservabilityDetails(runOptions),
+          });
+        });
+        return;
+      }
+
       const now = Date.now();
       const forceUsageUpdate = now - lastMidTurnContextUpdateAt >= MID_TURN_CONTEXT_CHECK_MIN_INTERVAL_MS;
       if (forceUsageUpdate) lastMidTurnContextUpdateAt = now;
       const snapshot = publishContextUsageUpdate("mid_turn_tool_result", forceUsageUpdate);
-      if (!snapshot?.overThreshold || midTurnContextAbortRequested) return;
+      if (!snapshot) return;
+
+      // Project accumulated tool-result bytes as additional tokens beyond what
+      // the estimator reports. The estimator anchors on the last assistant
+      // usage metadata, which doesn't account for tool results appended after
+      // that point. This projection closes the blind spot.
+      const projectedAdditionalTokens = Math.ceil(midTurnToolResultAccumulatedBytes / TOOL_RESULT_BYTES_PER_TOKEN);
+      const adjustedTokens = snapshot.tokens + projectedAdditionalTokens;
+      const overThreshold = adjustedTokens >= snapshot.thresholdTokens
+        || (snapshot.hardCeilingTokens > 0 && adjustedTokens >= snapshot.hardCeilingTokens);
+
+      if (!overThreshold) return;
 
       sawCompactionIntent = true;
       midTurnContextAbortRequested = true;
-      runOptions.onEvent?.(buildContextUsageUpdateEvent(snapshot.tokens, snapshot.contextWindow, "mid_turn_tool_result_over_threshold"));
+      runOptions.onEvent?.(buildContextUsageUpdateEvent(adjustedTokens, snapshot.contextWindow, "mid_turn_tool_result_over_threshold"));
       options.onWarn?.("Mid-turn context pressure detected after tool result; aborting for compaction", {
         operation: "run_agent.mid_turn_context_pressure",
         chatJid,
-        contextTokens: snapshot.tokens,
+        contextTokens: adjustedTokens,
+        estimatorReportedTokens: snapshot.tokens,
+        projectedAdditionalTokens,
+        midTurnToolResultAccumulatedBytes,
+        toolExecutionCount,
         contextWindow: snapshot.contextWindow,
         thresholdTokens: snapshot.thresholdTokens,
         thresholdPercent: snapshot.thresholdPercent,
         hardCeilingTokens: snapshot.hardCeilingTokens,
-        hardCeilingReached: snapshot.hardCeilingReached,
+        hardCeilingReached: snapshot.hardCeilingReached || (snapshot.hardCeilingTokens > 0 && adjustedTokens >= snapshot.hardCeilingTokens),
         autoCompactionScope: snapshot.autoCompactionScope,
         autoCompactionScopeTokens: snapshot.autoCompactionScopeTokens,
         autoCompactionScopeLimit: snapshot.autoCompactionScopeLimit,
@@ -983,6 +1038,21 @@ async function runPromptAttempt(
       hadToolActivity = true;
       if (event.type === "tool_execution_end") {
         toolExecutionCount += 1;
+        // Accumulate tool-result content size for mid-turn context projection.
+        const toolResult = (event as { result?: unknown }).result;
+        if (toolResult && typeof toolResult === "object") {
+          const content = (toolResult as { content?: unknown[] }).content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block && typeof block === "object" && (block as { type?: unknown }).type === "text") {
+                const text = (block as { text?: unknown }).text;
+                if (typeof text === "string") {
+                  midTurnToolResultAccumulatedBytes += text.length;
+                }
+              }
+            }
+          }
+        }
       }
       const toolName = (event as { toolName?: unknown }).toolName;
       if (!isRetrySafeToolName(toolName)) {
