@@ -7,6 +7,7 @@ import {
 } from '#editor-vendor/codemirror';
 import type { DecorationSet, EditorState, Extension, Range, Transaction } from '#editor-vendor/codemirror';
 import type { SyntaxNode } from '@lezer/common';
+import { treeGrowthEffect } from './tree-progress.js';
 
 export type TableAlign = 'left' | 'center' | 'right';
 
@@ -484,7 +485,12 @@ function transactionTouchesTable(transaction: Transaction, decorations: Decorati
 const editableTableField = StateField.define<DecorationSet>({
     create: (state) => buildEditableTableDecorations(state),
     update(decorations, transaction) {
-        if (!transaction.docChanged) return decorations;
+        if (!transaction.docChanged) {
+            // Rebuild when the parser discovers new Table nodes (tree growth)
+            const hasTreeGrowth = transaction.effects.some((effect) => effect.is(treeGrowthEffect));
+            if (hasTreeGrowth) return buildEditableTableDecorations(transaction.state);
+            return decorations;
+        }
         const mapped = decorations.map(transaction.changes);
         if (!transactionTouchesTable(transaction, decorations)) return mapped;
         return buildEditableTableDecorations(transaction.state);
