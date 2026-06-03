@@ -268,6 +268,10 @@ function matchTableCellInlineToken(raw: string, from: number): { token: TableCel
         if (decoded !== null) return { token: { type: 'entity', raw: match[0], text: decoded }, end: from + match[0].length };
     }
 
+    match = rest.match(/^\*\*\*([\s\S]+?)\*\*\*/);
+    if (match) return { token: { type: 'strong', delimiter: '**', children: [{ type: 'emphasis', delimiter: '*', children: parseTableCellInlineMarkdown(match[1]) }] }, end: from + match[0].length };
+    match = rest.match(/^___([\s\S]+?)___/);
+    if (match) return { token: { type: 'strong', delimiter: '__', children: [{ type: 'emphasis', delimiter: '_', children: parseTableCellInlineMarkdown(match[1]) }] }, end: from + match[0].length };
     match = rest.match(/^\*\*([\s\S]+?)\*\*/);
     if (match) return { token: { type: 'strong', delimiter: '**', children: parseTableCellInlineMarkdown(match[1]) }, end: from + match[0].length };
     match = rest.match(/^__([\s\S]+?)__/);

@@ -175,6 +175,14 @@ test("editable table cell inline parser leaves invalid or ambiguous markdown as 
   ]);
 });
 
+test("editable table cell inline parser handles combined bold-italic emphasis", () => {
+  expect(parseTableCellInlineMarkdown("***both*** ___also___")).toEqual([
+    { type: "strong", delimiter: "**", children: [{ type: "emphasis", delimiter: "*", children: [{ type: "text", text: "both" }] }] },
+    { type: "text", text: " " },
+    { type: "strong", delimiter: "__", children: [{ type: "emphasis", delimiter: "_", children: [{ type: "text", text: "also" }] }] },
+  ]);
+});
+
 test("editable table cell inline parser preserves nested link and mark shape", () => {
   expect(parseTableCellInlineMarkdown("__[strong link](https://example.com)__ and *soft [em](mailto:a@example.com)*")).toEqual([
     { type: "strong", delimiter: "__", children: [{ type: "link", children: [{ type: "text", text: "strong link" }], url: "https://example.com" }] },

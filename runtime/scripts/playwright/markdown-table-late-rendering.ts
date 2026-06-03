@@ -58,7 +58,7 @@ function buildFixture(): string {
     ['Autolink', '<https://example.com/auto>', 'Autolink text interaction'],
     ['Entity', '&amp; &#169; &#x1f642;', 'Entity decoding with raw preservation'],
     ['Image', '![alt](https://example.com/image.png)', 'Inline image preview'],
-    ['Nested', '**bold _em_**', 'Nested delimiter rendering'],
+    ['Nested', '**bold _em_** and ***both***', 'Nested delimiter rendering'],
     ['utime growth', '100 ticks/s', 'Exactly one core saturated'],
   ]));
   parts.push('');
@@ -147,6 +147,12 @@ try {
     const rawPipeLines = Array.from(document.querySelectorAll('.cm-line'))
       .map((line) => line.textContent || '')
       .filter((text) => text.includes('| Metric |') || text.includes('| State |') || text.includes('| syscr/syscw delta |'));
+    const lateTableInnerText = Array.from(document.querySelectorAll<HTMLElement>('[data-table-editor]'))
+      .map((element) => element.innerText || '')
+      .find((text) => text.includes('Metric') && text.includes('Interpretation')) ?? '';
+    const visibleDelimiterLeaks = ['**', '***', '__', '___', '~~', '`', '[docs]', '<https://example.com/auto>', '&amp;', '&#169;', '![alt]']
+      .filter((needle) => lateTableInnerText.includes(needle));
+
     const openedUrls: string[] = [];
     const originalOpen = window.open;
     window.open = ((url: string) => { openedUrls.push(String(url)); return null; }) as typeof window.open;
@@ -196,6 +202,8 @@ try {
       entityText,
       imageAlts,
       rawPreserved: lateDoc.includes('&amp; &#169; &#x1f642;') && lateDoc.includes('![alt](https://example.com/image.png)') && lateDoc.includes('<https://example.com/auto>'),
+      lateTableInnerText,
+      visibleDelimiterLeaks,
       lateTablePos: harness.lateTablePos,
       scrollTop: (document.querySelector('.cm-scroller') as HTMLElement | null)?.scrollTop ?? null,
       viewport: (view as any).viewport ?? null,
@@ -234,6 +242,9 @@ try {
   }
   if (!result.rawPreserved) {
     throw new Error('table cell raw markdown was not preserved for entities/images/autolinks');
+  }
+  if (result.visibleDelimiterLeaks.length > 0) {
+    throw new Error(`table cell resting text leaked markdown delimiters: ${JSON.stringify(result.visibleDelimiterLeaks)} text=${JSON.stringify(result.lateTableInnerText)}`);
   }
 
   console.log(`late table rendering ok: parserTables=${result.parserTables.length}, visibleWidgets=${result.widgets.length}, markdown=${JSON.stringify(result.markdownClassCounts)}, opens=${result.openedUrls.length}`);

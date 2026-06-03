@@ -18,7 +18,7 @@ function table(header: string[], rows: string[][]): string {
 
 function buildFixture(): string {
   const rows: string[][] = [
-    ['Nested', '**bold _em_**', 'nested mark edit target'],
+    ['Nested', '**bold _em_** and ***both***', 'nested mark edit target'],
     ['Entities', '&amp; &#169; &#x1f642;', 'entity raw preservation'],
     ['Links', '[docs](https://example.com/docs) and <https://example.com/auto>', 'link interactions'],
     ['Images', '![ok](https://example.com/ok.png) and ![bad](javascript:alert(1))', 'safe image preview only'],
@@ -212,6 +212,8 @@ try {
       entityText: textOf('.cm-md-table-cell-entity'),
       imageAlts: Array.from(document.querySelectorAll<HTMLImageElement>('.cm-md-table-cell-image')).map((img) => img.alt),
       unsafeImageRendered: Array.from(document.querySelectorAll<HTMLImageElement>('.cm-md-table-cell-image')).some((img) => img.alt === 'bad'),
+      visibleDelimiterLeaks: ['**', '***', '__', '___', '~~', '`', '[docs]', '<https://example.com/auto>', '&amp;', '&#169;', '![ok]']
+        .filter((needle) => (document.querySelector<HTMLElement>('[data-table-editor]')?.innerText || '').includes(needle)),
       docChecks: {
         nestedPreserved: doc.includes('**boXld _em_**'),
         pasteFlattenedEscaped: doc.includes('abM N\\|Pef'),
@@ -238,6 +240,7 @@ try {
   assert(result.entityText.includes('&') && result.entityText.includes('©') && result.entityText.includes('🙂'), `entity text missing decoded values: ${result.entityText}`);
   assert(result.imageAlts.includes('ok'), `safe image alt missing: ${JSON.stringify(result.imageAlts)}`);
   assert(!result.unsafeImageRendered, 'unsafe javascript image rendered as <img>');
+  assert(result.visibleDelimiterLeaks.length === 0, `resting table text leaked markdown delimiters: ${JSON.stringify(result.visibleDelimiterLeaks)}`);
   assert(Object.values(result.docChecks).every(Boolean), `raw/edit checks failed: ${JSON.stringify(result.docChecks)} fragment=${JSON.stringify(result.pasteFragment)}`);
   assert(result.metrics.bulkEditCount >= 50, `bulk edit count too low: ${result.metrics.bulkEditCount}`);
   assert(result.metrics.bulkEditP95Ms < 25, `bulk edit p95 too slow: ${result.metrics.bulkEditP95Ms}`);
