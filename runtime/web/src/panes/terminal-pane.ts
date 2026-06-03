@@ -109,19 +109,28 @@ function injectStyles(ownerDocument = document) {
         background: transparent !important;
       }
       .terminal-pane-xterm .xterm-viewport {
-        scrollbar-width: thin;
-        scrollbar-color: color-mix(in srgb, var(--text-secondary, #8b949e) 45%, transparent) transparent;
+        scrollbar-width: none;
       }
       .terminal-pane-xterm .xterm-viewport::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+      .terminal-scrollbar-thumb {
+        position: absolute;
+        right: 2px;
+        top: 8px;
         width: 2px;
-        height: 2px;
-      }
-      .terminal-pane-xterm .xterm-viewport::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      .terminal-pane-xterm .xterm-viewport::-webkit-scrollbar-thumb {
-        background: color-mix(in srgb, var(--text-secondary, #8b949e) 45%, transparent);
+        min-height: 18px;
         border-radius: 999px;
+        background: color-mix(in srgb, var(--text-secondary, #8b949e) 58%, transparent);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .14s ease;
+        z-index: 16;
+      }
+      .terminal-pane-xterm[data-scrollbar-visible="true"] .terminal-scrollbar-thumb,
+      .terminal-pane-xterm:focus-within .terminal-scrollbar-thumb {
+        opacity: .82;
       }
       .terminal-pane-xterm .terminal-status {
         position: absolute;
@@ -446,6 +455,11 @@ class TerminalPaneInstance {
     this.mediaQuery = null;
     this.mediaQueryListener = null;
     this.resizeListener = null;
+    this.scrollbarThumb = null;
+    this.scrollbarViewport = null;
+    this.scrollbarScrollListener = null;
+    this.scrollbarFrame = 0;
+    this.scrollDisposable = null;
     this.socket = null;
     this.heartbeatTimer = null;
     this.reconnectTimer = null;
@@ -474,10 +488,12 @@ class TerminalPaneInstance {
     this.body = this.ownerDocument.createElement("div");
     this.body.className = "terminal-body";
     this.body.innerHTML = '<div class="terminal-placeholder">Bootstrapping xterm.js…</div>';
+    this.scrollbarThumb = this.ownerDocument.createElement("div");
+    this.scrollbarThumb.className = "terminal-scrollbar-thumb";
     this.status = this.ownerDocument.createElement("span");
     this.status.className = "terminal-status";
     this.status.textContent = "Loading…";
-    this.root.append(this.body, this.status);
+    this.root.append(this.body, this.scrollbarThumb, this.status);
     container.appendChild(this.root);
 
     void this.bootstrap();
@@ -520,6 +536,7 @@ class TerminalPaneInstance {
       this.body.appendChild(this.host);
       terminal.open(this.host);
       this.installPostOpenAddons(runtime);
+      this.installOverlayScrollbar();
       this.installClipboardAndSearchShortcuts();
       this.installResizeSync();
       this.installThemeSync();
@@ -676,6 +693,48 @@ class TerminalPaneInstance {
     sync();
   }
 
+  installOverlayScrollbar() {
+    const viewport = this.host?.querySelector?.(".xterm-viewport") || null;
+    if (!viewport || !this.scrollbarThumb) return;
+    if (this.scrollbarViewport && this.scrollbarViewport !== viewport && this.scrollbarScrollListener) {
+      try { this.scrollbarViewport.removeEventListener("scroll", this.scrollbarScrollListener); } catch {}
+    }
+    this.scrollbarViewport = viewport;
+    if (!this.scrollbarScrollListener) this.scrollbarScrollListener = () => this.scheduleScrollbarSync();
+    viewport.addEventListener("scroll", this.scrollbarScrollListener, { passive: true });
+    this.scrollDisposable = this.terminal?.onScroll?.(() => this.scheduleScrollbarSync()) || this.scrollDisposable;
+    this.scheduleScrollbarSync();
+  }
+
+  scheduleScrollbarSync() {
+    if (this.disposed) return;
+    if (this.scrollbarFrame) this.ownerWindow.cancelAnimationFrame(this.scrollbarFrame);
+    this.scrollbarFrame = this.ownerWindow.requestAnimationFrame(() => {
+      this.scrollbarFrame = 0;
+      this.syncOverlayScrollbar();
+    });
+  }
+
+  syncOverlayScrollbar() {
+    const viewport = this.scrollbarViewport || this.host?.querySelector?.(".xterm-viewport") || null;
+    const thumb = this.scrollbarThumb;
+    if (!viewport || !thumb || !this.root) return;
+    const scrollHeight = viewport.scrollHeight || 0;
+    const clientHeight = viewport.clientHeight || 0;
+    const scrollable = scrollHeight > clientHeight + 1;
+    this.root.dataset.scrollbarVisible = scrollable ? "true" : "false";
+    if (!scrollable) return;
+    const rootRect = this.root.getBoundingClientRect?.() || { top: 0, height: clientHeight };
+    const viewportRect = viewport.getBoundingClientRect?.() || { top: rootRect.top, height: clientHeight };
+    const trackTop = Math.max(6, Math.round((viewportRect.top || 0) - (rootRect.top || 0)));
+    const trackHeight = Math.max(18, Math.round(Math.min(viewportRect.height || clientHeight, (rootRect.height || clientHeight) - trackTop - 6)));
+    const thumbHeight = Math.max(18, Math.round(trackHeight * (clientHeight / scrollHeight)));
+    const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
+    const scrollRatio = (viewport.scrollTop || 0) / Math.max(1, scrollHeight - clientHeight);
+    thumb.style.top = `${trackTop + Math.round(maxThumbTop * scrollRatio)}px`;
+    thumb.style.height = `${thumbHeight}px`;
+  }
+
   installResizeSync() {
     this.resizeListener = () => this.scheduleResize();
     this.ownerWindow.addEventListener("resize", this.resizeListener);
@@ -708,6 +767,7 @@ class TerminalPaneInstance {
   resize(_force = false) {
     if (!this.terminal) return;
     try { this.fitAddon?.fit?.(); } catch (error) { console.debug("[terminal-pane] fit failed", error); }
+    this.scheduleScrollbarSync();
     this.sendResize();
   }
 
@@ -869,7 +929,7 @@ class TerminalPaneInstance {
       return;
     }
     if (payload?.type === "output" && typeof payload.data === "string") {
-      this.terminal.write(payload.data);
+      this.terminal.write(payload.data, () => this.scheduleScrollbarSync());
       return;
     }
     if (payload?.type === "exit") {
@@ -934,6 +994,11 @@ class TerminalPaneInstance {
     this.clearReconnectTimer();
     try { this.inputDisposable?.dispose?.(); } catch {}
     try { this.resizeDisposable?.dispose?.(); } catch {}
+    try { this.scrollDisposable?.dispose?.(); } catch {}
+    if (this.scrollbarFrame) this.ownerWindow.cancelAnimationFrame(this.scrollbarFrame);
+    if (this.scrollbarViewport && this.scrollbarScrollListener) {
+      try { this.scrollbarViewport.removeEventListener("scroll", this.scrollbarScrollListener); } catch {}
+    }
     try { this.socket?.close?.(); } catch {}
     try { this.resizeObserver?.disconnect?.(); } catch {}
     try { this.themeObserver?.disconnect?.(); } catch {}
